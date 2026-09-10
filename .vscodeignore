@@ -1,0 +1,10 @@
+.vscode/**
+src/**
+node_modules/**
+out/test/**
+.gitignore
+yarn.lock
+npm-debug.log
+tsconfig.json
+**/*.map
+**/*.ts

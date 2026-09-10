@@ -1,0 +1,85 @@
+{
+  "name": "router-models",
+  "displayName": "Router Models",
+  "description": "Add OpenAI-compatible providers to VS Code Chat",
+  "version": "0.0.1",
+  "publisher": "web-elite",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/web-elite/router-models.git"
+  },
+  "homepage": "https://github.com/web-elite/router-models#readme",
+  "bugs": {
+    "url": "https://github.com/web-elite/router-models/issues"
+  },
+  "keywords": [
+    "ai",
+    "chat",
+    "openai",
+    "copilot",
+    "language-model",
+    "llm"
+  ],
+  "engines": {
+    "vscode": "^1.104.0"
+  },
+  "categories": [
+    "AI",
+    "Chat",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languageModelChatProviders": [
+      {
+        "vendor": "router-models",
+        "displayName": "Router Models",
+        "managementCommand": "router-models.manage"
+      }
+    ],
+    "commands": [
+      {
+        "command": "router-models.manage",
+        "title": "Router Models: Add Provider"
+      },
+      {
+        "command": "router-models.remove",
+        "title": "Router Models: Remove Provider"
+      },
+      {
+        "command": "router-models.refresh",
+        "title": "Router Models: Refresh Models"
+      }
+    ],
+    "configuration": {
+      "title": "Router Models",
+      "properties": {
+        "routerModels.requestTimeoutMs": {
+          "type": "number",
+          "default": 30000,
+          "minimum": 1000,
+          "description": "Timeout in milliseconds for requests made to providers."
+        },
+        "routerModels.defaultTemperature": {
+          "type": "number",
+          "default": 0.2,
+          "description": "Default temperature used for chat completion requests."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.104.0",
+    "typescript": "^5.5.0"
+  }
+}

@@ -9,6 +9,24 @@ Powered by the [`languageModelChatProviders`](https://code.visualstudio.com/upda
 - 🔌 Register any OpenAI-compatible endpoint as a chat model provider in VS Code
 - 📦 Automatically discovers models from the provider's `/v1/models` endpoint
 - 🔐 API keys stored securely in VS Code **SecretStorage** (never in plain settings)
+- 🔑 **Multi-key support** — enter several keys per provider; requests rotate
+  round-robin and automatically fall back to the next key on `429` /
+  `500 / 502 / 503 / 504` / connection errors
+- ❄️ **Smart cooldown** — a rate-limited key rests for a configurable time
+  (per provider, default 60 s); a `Retry-After` header from the provider wins.
+  `401 / 403` burn a key (×) until it is replaced
+- 📊 **Live key monitor in the status bar** —
+  `Router: <model> ∣ Keys: N active ∣ Total: T ✓R 429:C ×B` — click for a menu
+  with per-key details, remaining cooldowns and a *Reset Cooldowns* action
+- 🔁 **Auto-retry on empty responses** — empty / cut streams (e.g. Gemini's
+  `delta: {}` endings) are retried automatically instead of showing
+  *"Sorry, no response was returned"*
+- 🧠 **Reasoning passthrough** — `reasoning_content` / `reasoning` / `thinking`
+  / `thought` output is surfaced instead of being dropped
+- 🛠️ **Full tool-calling support** — VS Code tool calls and tool results are
+  converted end to end, so Copilot Chat agents keep working
+- 🖼️ **Automatic favicon** — the provider's icon is fetched from its host
+  automatically (manual icon URL still wins)
 - 💾 Model list cached in `globalState` — available instantly after restart
 - 🗑️ Add / remove providers through a simple UI flow
 - ⏱️ Configurable request timeout and default temperature
@@ -20,7 +38,8 @@ Powered by the [`languageModelChatProviders`](https://code.visualstudio.com/upda
 3. Enter:
    - A provider **name** (e.g. `OpenAI`, `OpenRouter`)
    - The **base URL** (e.g. `https://api.openai.com/v1`)
-   - Your **API key**
+   - One or more **API keys** (one per line, or comma separated) — optional
+   - An optional **cooldown** in seconds used after a `429`
 4. Open the Copilot Chat model picker — models from your provider appear under the **Router Models** vendor.
 
 ## Commands
@@ -28,15 +47,21 @@ Powered by the [`languageModelChatProviders`](https://code.visualstudio.com/upda
 | Command | Description |
 | --- | --- |
 | `Router Models: Add Provider` | Register a new OpenAI-compatible provider |
-| `Router Models: Remove Provider` | Remove a configured provider (and its key) |
+| `Router Models: Remove Provider` | Remove a configured provider (and its keys) |
 | `Router Models: Refresh Models` | Re-fetch the model list from all providers |
+| `Router Models: Show Key Status` | Open the key / cooldown monitor menu |
+| `Router Models: Reset Key Cooldowns` | Instantly clear all 429 cooldowns |
 
 ## Extension Settings
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `routerModels.requestTimeoutMs` | `30000` | Timeout (ms) for requests made to providers |
+| `routerModels.requestTimeoutMs` | `30000` | Timeout (ms) for the request handshake (streaming is never cut off) |
 | `routerModels.defaultTemperature` | `0.2` | Default temperature for chat completions |
+| `routerModels.defaultCooldownSeconds` | `60` | Cooldown a key rests after a `429` (per-provider override available) |
+| `routerModels.maxRetries` | `3` | Extra attempts with the next key on `429`/server errors/empty responses |
+| `routerModels.autoFavicon` | `true` | Auto-detect the provider favicon from its base URL |
+| `routerModels.showReasoning` | `true` | Surface reasoning / thinking output as visible text |
 
 ## Supported Endpoints
 

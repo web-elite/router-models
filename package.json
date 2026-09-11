@@ -2,7 +2,7 @@
   "name": "router-models",
   "displayName": "Router Models",
   "description": "Add OpenAI-compatible providers to VS Code Chat",
-  "version": "0.0.1",
+  "version": "0.0.3",
   "publisher": "web-elite",
   "license": "MIT",
   "repository": {
@@ -41,23 +41,77 @@
         "managementCommand": "router-models.manage"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "router-models",
+          "title": "Router Models",
+          "icon": "media/activitybar.svg"
+        }
+      ]
+    },
+    "views": {
+      "router-models": [
+        {
+          "type": "webview",
+          "id": "router-models.sidebar",
+          "name": "Router Models"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "router-models.manage",
+        "title": "Router Models: Manage Providers"
+      },
+      {
+        "command": "router-models.addProvider",
         "title": "Router Models: Add Provider"
+      },
+      {
+        "command": "router-models.editProvider",
+        "title": "Router Models: Edit Provider"
       },
       {
         "command": "router-models.remove",
         "title": "Router Models: Remove Provider"
       },
       {
+        "command": "router-models.addModel",
+        "title": "Router Models: Add Model Manually"
+      },
+      {
         "command": "router-models.refresh",
         "title": "Router Models: Refresh Models"
+      },
+      {
+        "command": "router-models.statusMenu",
+        "title": "Router Models: Show Key Status"
+      },
+      {
+        "command": "router-models.resetCooldowns",
+        "title": "Router Models: Reset Key Cooldowns"
       }
     ],
     "configuration": {
       "title": "Router Models",
       "properties": {
+        "routerModels.includePatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Glob patterns (matched against model ids) for models to always show. Empty list means show all models. Example: [\"*deepseek*\"] shows only DeepSeek models, [\"*:free\"] shows only free models."
+        },
+        "routerModels.excludePatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Glob patterns (matched against model ids) for models to always hide. Exclude wins over include. Example: [\"*kimi*\"] permanently hides all Kimi models."
+        },
         "routerModels.requestTimeoutMs": {
           "type": "number",
           "default": 30000,
@@ -68,6 +122,29 @@
           "type": "number",
           "default": 0.2,
           "description": "Default temperature used for chat completion requests."
+        },
+        "routerModels.defaultCooldownSeconds": {
+          "type": "number",
+          "default": 60,
+          "minimum": 0,
+          "description": "Default cooldown in seconds a key rests after a 429. Can be overridden per provider. A Retry-After header from the provider always wins."
+        },
+        "routerModels.maxRetries": {
+          "type": "number",
+          "default": 3,
+          "minimum": 0,
+          "maximum": 10,
+          "description": "How many times a chat request is retried with the next available key on 429 / server errors, or when the model returns an empty response."
+        },
+        "routerModels.autoFavicon": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically detect and download the favicon of the provider's host as its icon (a manually entered icon URL always wins)."
+        },
+        "routerModels.showReasoning": {
+          "type": "boolean",
+          "default": true,
+          "description": "Surface reasoning / thinking output (reasoning_content, reasoning, thinking, thought) from models as visible text instead of dropping it."
         }
       }
     }
@@ -78,7 +155,7 @@
     "watch": "tsc -watch -p ./"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@types/node": "^22.20.2",
     "@types/vscode": "^1.104.0",
     "typescript": "^5.5.0"
   }

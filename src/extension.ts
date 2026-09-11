@@ -1,39 +1,54 @@
 import * as vscode from 'vscode';
 import { RouterProvider } from './provider';
+import { RouterSidebar } from './sidebar';
+import { RouterStatusBar } from './statusbar';
 
 export function activate(context: vscode.ExtensionContext) {
     const provider = new RouterProvider(context);
+    const sidebar = new RouterSidebar(context, provider);
+    const statusBar = new RouterStatusBar(provider);
 
     context.subscriptions.push(
+        statusBar,
         vscode.lm.registerLanguageModelChatProvider(
             'router-models',
             provider
-        )
-    );
-
-    context.subscriptions.push(
+        ),
+        vscode.window.registerWebviewViewProvider(
+            RouterSidebar.viewType,
+            sidebar
+        ),
         vscode.commands.registerCommand(
             'router-models.manage',
-            () => provider.addProvider()
-        )
-    );
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand(
-            'router-models.remove',
-            () => provider.removeProvider()
-        )
-    );
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand(
-            'router-models.refresh',
-            () => {
-                provider.refresh();
-                vscode.window.showInformationMessage(
-                    'Router models refreshed.'
+            async () => {
+                await vscode.commands.executeCommand(
+                    `${RouterSidebar.viewType}.focus`
                 );
             }
+        ),
+        vscode.commands.registerCommand(
+            'router-models.addProvider',
+            () => provider.addProviderFlow()
+        ),
+        vscode.commands.registerCommand(
+            'router-models.editProvider',
+            () => provider.editProviderFlow()
+        ),
+        vscode.commands.registerCommand(
+            'router-models.remove',
+            () => provider.removeProviderFlow()
+        ),
+        vscode.commands.registerCommand(
+            'router-models.addModel',
+            () => provider.addModelFlow()
+        ),
+        vscode.commands.registerCommand(
+            'router-models.refresh',
+            () => provider.refreshAll()
+        ),
+        vscode.commands.registerCommand(
+            'router-models.resetCooldowns',
+            () => provider.resetCooldowns()
         )
     );
 }

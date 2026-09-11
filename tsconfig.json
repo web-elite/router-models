@@ -1,16 +1,17 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "commonjs",
+    "module": "node16",
     "lib": [
       "ES2022",
       "DOM"
     ],
+    "types": ["node"],
     "outDir": "out",
     "rootDir": "src",
     "strict": true,
     "esModuleInterop": true,
-    "moduleResolution": "node",
+    "moduleResolution": "node16",
     "sourceMap": true
   },
   "exclude": [

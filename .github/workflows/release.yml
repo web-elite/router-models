@@ -1,0 +1,137 @@
+# ------------------------------------------------------------------
+# Router Models — CI, automatic version tagging and VSIX releases.
+#
+# - Every push / PR: compile + smoke tests
+# - Push to main with a bumped `package.json` version:
+#     the matching `vX.Y.Z` tag is created automatically and a GitHub
+#     Release is published with the packaged `.vsix`
+# - Pushing a `v*` tag manually: the same release pipeline runs
+# ------------------------------------------------------------------
+
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # ----------------------------------------------------------------
+  # CI — compile and run the smoke tests
+  # ----------------------------------------------------------------
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile
+        run: npm run compile
+
+      - name: Smoke tests
+        run: node test/smoke.js
+
+  # ----------------------------------------------------------------
+  # Release — package the VSIX and publish a GitHub Release.
+  #
+  # Runs on version tags, and on pushes to main (where a missing
+  # version tag is created automatically = "release on update").
+  # ----------------------------------------------------------------
+  release:
+    if: >-
+      github.event_name == 'push' &&
+      (
+        github.ref == 'refs/heads/main' ||
+        startsWith(github.ref, 'refs/tags/v')
+      )
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile
+        run: npm run compile
+
+      - name: Smoke tests
+        run: node test/smoke.js
+
+      - id: decide
+        name: Decide release action
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          TAG="v${VERSION}"
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          if [[ "${GITHUB_REF}" == "refs/tags/"* ]]; then
+            if [ "${GITHUB_REF_NAME}" != "$TAG" ]; then
+              echo "::error::Tag ${GITHUB_REF_NAME} does not match" \
+                   "package.json version ($TAG)"
+              exit 1
+            fi
+            echo "Tag push detected: releasing $TAG"
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          else
+            if git tag --list | grep -qx "$TAG"; then
+              echo "Tag $TAG already exists - version $VERSION" \
+                   "was already released. Skipping."
+              echo "should_release=false" >> "$GITHUB_OUTPUT"
+            else
+              git config user.name "github-actions[bot]"
+              git config user.email \
+                "41898282+github-actions[bot]@users.noreply.github.com"
+              git tag -a "$TAG" -m "Release $TAG"
+              git push origin "$TAG"
+              echo "Version bump detected: created tag $TAG"
+              echo "should_release=true" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Package VSIX
+        if: steps.decide.outputs.should_release == 'true'
+        id: pack
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          FILE="router-models-${VERSION}.vsix"
+          npx --yes @vscode/vsce@3 package --no-dependencies -o "$FILE"
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Upload build artifact
+        if: steps.decide.outputs.should_release == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pack.outputs.file }}
+          path: ${{ steps.pack.outputs.file }}
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: steps.decide.outputs.should_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.decide.outputs.tag }}
+          files: ${{ steps.pack.outputs.file }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true

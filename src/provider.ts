@@ -17,6 +17,7 @@ import {
 
 import {
     MAX_SEARCH_DEPTH,
+    decodeTextFile,
     groupConnections,
     parseConnections,
     ParsedConnection
@@ -1369,10 +1370,10 @@ export class RouterProvider
         const fileUri = uris[0];
         const fileName = path.basename(fileUri.fsPath);
 
-        let content: string;
+        let buffer: Buffer;
 
         try {
-            content = await fs.readFile(fileUri.fsPath, 'utf8');
+            buffer = await fs.readFile(fileUri.fsPath);
         } catch (error) {
             vscode.window.showErrorMessage(
                 `Router Models: could not read ${fileName} — ` +
@@ -1382,13 +1383,17 @@ export class RouterProvider
             return;
         }
 
+        const content = decodeTextFile(buffer);
+
         let parsed: unknown;
 
         try {
             parsed = JSON.parse(content);
         } catch (error) {
             vscode.window.showErrorMessage(
-                `Router Models: ${fileName} is not valid JSON — ` +
+                `Router Models: ${fileName} ` +
+                    `(${(buffer.length / 1024).toFixed(1)} KB, fully ` +
+                    'read) is not valid JSON — ' +
                     toErrorMessage(error)
             );
 
@@ -1399,8 +1404,9 @@ export class RouterProvider
 
         if (candidates.length === 0) {
             vscode.window.showWarningMessage(
-                `Router Models: no "providerConnections" list was found ` +
-                    `in ${fileName} (searched ` +
+                `Router Models: no "providerConnections" list was ` +
+                    `found in ${fileName} ` +
+                    `(${(buffer.length / 1024).toFixed(1)} KB, searched ` +
                     `${MAX_SEARCH_DEPTH} levels deep).`
             );
 

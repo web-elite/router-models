@@ -77,6 +77,40 @@ function firstNonEmptyString(...values: unknown[]): string | undefined {
     return undefined;
 }
 
+/**
+ * Decodes a read file buffer into text, honoring the byte order marks
+ * of UTF-8 and UTF-16 exports (some Windows tools save UTF-16). The
+ * BOM itself is stripped — otherwise `JSON.parse` would reject the
+ * whole file.
+ */
+export function decodeTextFile(buffer: Buffer): string {
+    if (
+        buffer.length >= 3 &&
+        buffer[0] === 0xef &&
+        buffer[1] === 0xbb &&
+        buffer[2] === 0xbf
+    ) {
+        // UTF-8 BOM.
+        return buffer.subarray(3).toString('utf8');
+    }
+
+    if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) {
+        // UTF-16 LE BOM.
+        return buffer.subarray(2).toString('utf16le');
+    }
+
+    if (buffer.length >= 2 && buffer[0] === 0xfe && buffer[1] === 0xff) {
+        // UTF-16 BE BOM: swap to LE and decode.
+        const swapped = Buffer.from(buffer.subarray(2));
+
+        swapped.swap16();
+
+        return swapped.toString('utf16le');
+    }
+
+    return buffer.toString('utf8');
+}
+
 export type ParsedConnection = {
     /** One-based position among all discovered connections. */
     index: number;

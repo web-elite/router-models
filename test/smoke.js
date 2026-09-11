@@ -20,6 +20,7 @@ const {
     findProviderConnections,
     groupConnections,
     parseConnections,
+    decodeTextFile,
     MAX_SEARCH_DEPTH
 } = require('../out/import.js');
 
@@ -625,6 +626,35 @@ test('groupConnections: grouping is case-insensitive on the prefix', () => {
     assert.strictEqual(groups.length, 1);
     assert.strictEqual(groups[0].id, 'uniKey');
     assert.deepStrictEqual(groups[0].apiKeys, ['k1', 'k2']);
+});
+
+test('decodeTextFile: BOM handling (utf8 / utf16le / utf16be / plain)', () => {
+    const payload = Buffer.from('{"a":1}', 'utf8');
+
+    assert.strictEqual(decodeTextFile(payload), '{"a":1}');
+    assert.strictEqual(
+        decodeTextFile(Buffer.concat([
+            Buffer.from([0xef, 0xbb, 0xbf]),
+            payload
+        ])),
+        '{"a":1}'
+    );
+    assert.strictEqual(
+        decodeTextFile(Buffer.concat([
+            Buffer.from([0xff, 0xfe]),
+            Buffer.from('{"a":1}', 'utf16le')
+        ])),
+        '{"a":1}'
+    );
+
+    const be = Buffer.from('{"a":1}', 'utf16le');
+
+    be.swap16();
+
+    assert.strictEqual(
+        decodeTextFile(Buffer.concat([Buffer.from([0xfe, 0xff]), be])),
+        '{"a":1}'
+    );
 });
 
 // ---------------------------------------------------------------

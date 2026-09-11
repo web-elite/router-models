@@ -16,6 +16,13 @@ const {
     ToolCallAccumulator
 } = require('../out/stream.js');
 
+const {
+    findProviderConnections,
+    groupConnections,
+    parseConnections,
+    MAX_SEARCH_DEPTH
+} = require('../out/import.js');
+
 let passed = 0;
 const test = (name, fn) => {
     fn();
@@ -396,6 +403,228 @@ test('ToolCallAccumulator: finish completes incomplete calls by index', () => {
         ['{"p":', '']
     );
     assert.deepStrictEqual(acc.finish(), []);
+});
+
+// ---------------------------------------------------------------
+
+// ---------------------------------------------------------------
+// JSON import (src/import.ts)
+// ---------------------------------------------------------------
+
+test('findProviderConnections: list at the root level', () => {
+    const found = findProviderConnections({
+        providerConnections: [
+            { name: 'A', apiKey: 'k1' },
+            { name: 'B' }
+        ]
+    });
+
+    assert.strictEqual(found.length, 2);
+    assert.strictEqual(found[0].name, 'A');
+    assert.strictEqual(found[1].name, 'B');
+});
+
+test('findProviderConnections: nested up to 4 levels (arrays transparent)', () => {
+    const wrap = (levels) => {
+        let node = { providerConnections: [{ name: 'A' }] };
+
+        for (let i = 0; i < levels - 1; i++) {
+            node = { wrap: node };
+        }
+
+        return node;
+    };
+
+    assert.strictEqual(
+        findProviderConnections(wrap(1)).length, 1);
+    assert.strictEqual(
+        findProviderConnections(wrap(MAX_SEARCH_DEPTH)).length, 1);
+    assert.strictEqual(
+        findProviderConnections(wrap(MAX_SEARCH_DEPTH + 1)).length, 0);
+
+    // Arrays are transparent containers: no extra level.
+    assert.strictEqual(
+        findProviderConnections({
+            data: [{ nested: { providerConnections: [{ name: 'B' }] } }]
+        }).length, 1);
+});
+
+test('findProviderConnections: multiple lists at different depths', () => {
+    const found = findProviderConnections({
+        data: [
+            { providerConnections: [{ name: 'A' }] },
+            {
+                nested: {
+                    providerConnections: [{ name: 'B' }, { name: 'C' }]
+                }
+            }
+        ]
+    });
+
+    assert.strictEqual(found.length, 3);
+});
+
+test('findProviderConnections: junk values are ignored', () => {
+    assert.deepStrictEqual(findProviderConnections(null), []);
+    assert.deepStrictEqual(findProviderConnections('nope'), []);
+    assert.deepStrictEqual(
+        findProviderConnections({ providerConnections: 'not-a-list' }),
+        []
+    );
+    assert.deepStrictEqual(
+        findProviderConnections({ providerConnections: [1, 'x', null] }),
+        []
+    );
+});
+
+test('parseConnections: maps the documented fields', () => {
+    const parsed = parseConnections({
+        providerConnections: [{
+            testStatus: 'active',
+            apiKey: 'sk-test',
+            providerSpecificData: {
+                baseUrl: 'https://www.getunikey.ai/v1/',
+                nodeName: 'UniKey'
+            },
+            provider: 'openai-compatible-chat-123',
+            name: 'Alirezaae044 1',
+            isActive: true
+        }]
+    });
+
+    assert.strictEqual(parsed.length, 1);
+    assert.strictEqual(parsed[0].name, 'Alirezaae044 1');
+    assert.strictEqual(
+        parsed[0].baseUrl, 'https://www.getunikey.ai/v1/');
+    assert.strictEqual(parsed[0].apiKey, 'sk-test');
+    assert.strictEqual(parsed[0].source, 'openai-compatible-chat-123');
+    assert.strictEqual(parsed[0].label, 'Alirezaae044 1');
+    assert.strictEqual(parsed[0].index, 1);
+});
+
+test('parseConnections: fallbacks (nodeName, baseUrl on the connection)', () => {
+    const parsed = parseConnections({
+        providerConnections: [
+            {
+                providerSpecificData: { nodeName: 'UniKey' },
+                baseUrl: 'https://x.dev/v1',
+                key: 'abc'
+            },
+            { provider: 'opencode' }
+        ]
+    });
+
+    assert.strictEqual(parsed[0].name, 'UniKey');
+    assert.strictEqual(parsed[0].baseUrl, 'https://x.dev/v1');
+    assert.strictEqual(parsed[0].apiKey, 'abc');
+
+    assert.strictEqual(parsed[1].name, undefined);
+    assert.strictEqual(parsed[1].apiKey, undefined);
+    assert.strictEqual(parsed[1].label, 'opencode');
+    assert.strictEqual(parsed[1].source, 'opencode');
+});
+
+test('parseConnections: trims strings and ignores non-strings', () => {
+    const parsed = parseConnections({
+        providerConnections: [
+            { apiKey: '  sk-x  ', baseUrl: 42, name: ' My Router ' }
+        ]
+    });
+
+    assert.strictEqual(parsed[0].apiKey, 'sk-x');
+    assert.strictEqual(parsed[0].baseUrl, undefined);
+    assert.strictEqual(parsed[0].name, 'My Router');
+});
+
+// ---------------------------------------------------------------
+// Provider grouping (prefix = one provider, N keys)
+// ---------------------------------------------------------------
+
+test('groupConnections: same prefix merges into one provider with all keys', () => {
+    const node = {
+        prefix: 'b-ai',
+        baseUrl: 'https://api.b.ai/v1',
+        nodeName: 'Free (Limited Time)'
+    };
+
+    const groups = groupConnections(parseConnections({
+        providerConnections: [
+            { apiKey: 'k1', name: 'Key 1', providerSpecificData: node },
+            { apiKey: 'k2', name: 'Key 2', providerSpecificData: node },
+            { apiKey: 'k1', name: 'Key 3', providerSpecificData: node }
+        ]
+    }));
+
+    assert.strictEqual(groups.length, 1);
+    assert.strictEqual(groups[0].id, 'b-ai');
+    assert.strictEqual(groups[0].name, 'Free (Limited Time)');
+    assert.strictEqual(groups[0].baseUrl, 'https://api.b.ai/v1');
+    assert.deepStrictEqual(groups[0].apiKeys, ['k1', 'k2']);
+    assert.strictEqual(groups[0].connections, 3);
+});
+
+test('groupConnections: different prefixes stay separate providers', () => {
+    const groups = groupConnections(parseConnections({
+        providerConnections: [
+            {
+                apiKey: 'k1',
+                providerSpecificData: {
+                    prefix: 'uniKey',
+                    baseUrl: 'https://a.dev/v1/',
+                    nodeName: 'UniKey'
+                }
+            },
+            {
+                apiKey: 'k2',
+                providerSpecificData: {
+                    prefix: 'hive',
+                    baseUrl: 'https://b.dev/api/v3',
+                    nodeName: 'Hive'
+                }
+            },
+            { provider: 'opencode' }
+        ]
+    }));
+
+    assert.strictEqual(groups.length, 3);
+    assert.deepStrictEqual(
+        groups.map(g => g.id),
+        ['uniKey', 'hive', 'opencode']
+    );
+    assert.deepStrictEqual(
+        groups.map(g => g.name),
+        ['UniKey', 'Hive', 'Imported Provider']
+    );
+    assert.deepStrictEqual(
+        groups.map(g => g.apiKeys.length),
+        [1, 1, 0]
+    );
+});
+
+test('groupConnections: prefix missing falls back to provider / host', () => {
+    const groups = groupConnections(parseConnections({
+        providerConnections: [
+            { apiKey: 'k1', provider: 'custom', baseUrl: 'https://x.dev/v1' },
+            { apiKey: 'k2', baseUrl: 'https://y.dev/v1' }
+        ]
+    }));
+
+    assert.strictEqual(groups.length, 2);
+    assert.strictEqual(groups[0].id, 'custom');
+    assert.strictEqual(groups[1].id, 'y.dev');
+});
+
+test('groupConnections: grouping is case-insensitive on the prefix', () => {
+    const groups = groupConnections(parseConnections({
+        providerConnections: [
+            { apiKey: 'k1', providerSpecificData: { prefix: 'uniKey' } },
+            { apiKey: 'k2', providerSpecificData: { prefix: 'UniKey' } }
+        ]
+    }));
+
+    assert.strictEqual(groups.length, 1);
+    assert.strictEqual(groups[0].id, 'uniKey');
+    assert.deepStrictEqual(groups[0].apiKeys, ['k1', 'k2']);
 });
 
 // ---------------------------------------------------------------

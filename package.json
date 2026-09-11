@@ -2,7 +2,7 @@
   "name": "router-models",
   "displayName": "Router Models",
   "description": "Add OpenAI-compatible providers to VS Code Chat",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "publisher": "web-elite",
   "license": "MIT",
   "repository": {
@@ -67,6 +67,10 @@
       {
         "command": "router-models.addProvider",
         "title": "Router Models: Add Provider"
+      },
+      {
+        "command": "router-models.importJson",
+        "title": "Router Models: Import Providers from JSON"
       },
       {
         "command": "router-models.editProvider",

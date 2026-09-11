@@ -192,6 +192,11 @@ export class RouterSidebar
                     await this.pushState();
                     break;
 
+                case 'importJson':
+                    await this.provider.importFromJsonFile();
+                    await this.pushState();
+                    break;
+
                 case 'resetCooldowns':
                     this.provider.resetCooldowns(
                         this.str(message.providerId)
@@ -271,6 +276,7 @@ export class RouterSidebar
         <img class="logo" src="${media('logo.svg')}" alt="">
         <span class="title">Router Models</span>
         <button id="btn-add" class="icon-btn" title="Add provider">+</button>
+        <button id="btn-import" class="icon-btn" title="Import providers from JSON">&#10515;</button>
         <button id="btn-refresh" class="icon-btn" title="Refresh all providers">&#8635;</button>
         <button id="btn-settings" class="icon-btn" title="Include / exclude settings">&#9881;</button>
     </header>

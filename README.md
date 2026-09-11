@@ -27,6 +27,12 @@ Powered by the [`languageModelChatProviders`](https://code.visualstudio.com/upda
   converted end to end, so Copilot Chat agents keep working
 - 🖼️ **Automatic favicon** — the provider's icon is fetched from its host
   automatically (manual icon URL still wins)
+- 📥 **JSON import** — pick any JSON export containing `providerConnections`
+  (searched up to 4 levels deep); connections sharing a
+  `providerSpecificData.prefix` are merged into ONE provider with all of
+  their API keys (7 keys → one provider with 7 rotating keys), the prefix
+  becomes the provider id and `nodeName` its name, and keys that are
+  already known are skipped
 - 💾 Model list cached in `globalState` — available instantly after restart
 - 🗑️ Add / remove providers through a simple UI flow
 - ⏱️ Configurable request timeout and default temperature
@@ -47,6 +53,7 @@ Powered by the [`languageModelChatProviders`](https://code.visualstudio.com/upda
 | Command | Description |
 | --- | --- |
 | `Router Models: Add Provider` | Register a new OpenAI-compatible provider |
+| `Router Models: Import Providers from JSON` | Pick a JSON file — `providerConnections` entries (found up to 4 levels deep) are imported one by one with their API keys |
 | `Router Models: Remove Provider` | Remove a configured provider (and its keys) |
 | `Router Models: Refresh Models` | Re-fetch the model list from all providers |
 | `Router Models: Show Key Status` | Open the key / cooldown monitor menu |

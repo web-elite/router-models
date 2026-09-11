@@ -365,7 +365,9 @@
                 '<p class="hint">Add an OpenAI-compatible endpoint — ' +
                 'its models will appear in the Copilot model picker.</p>' +
                 '<button class="btn" data-action="add-provider">' +
-                '+ Add Provider</button></div>';
+                '+ Add Provider</button> ' +
+                '<button class="btn secondary" data-action="import-json">' +
+                '&#10515; Import JSON</button></div>';
             return;
         }
 
@@ -512,6 +514,11 @@
             return;
         }
 
+        if (action === 'import-json') {
+            post({ type: 'importJson' });
+            return;
+        }
+
         var pid = button.getAttribute('data-pid');
 
         if (!pid) {
@@ -557,6 +564,11 @@
 
     document.getElementById('btn-add')
         .addEventListener('click', openAddProviderForm);
+
+    document.getElementById('btn-import')
+        .addEventListener('click', function () {
+            post({ type: 'importJson' });
+        });
 
     document.getElementById('btn-refresh')
         .addEventListener('click', function () {

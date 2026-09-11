@@ -15,6 +15,13 @@ import {
     ProviderHttpError
 } from './keys';
 
+import {
+    MAX_SEARCH_DEPTH,
+    groupConnections,
+    parseConnections,
+    ParsedConnection
+} from './import';
+
 import { discoverFavicon } from './favicon';
 
 import {
@@ -1330,6 +1337,295 @@ export class RouterProvider
         );
 
         return picked?.provider;
+    }
+
+    // ---------------------------------------------------------------
+    // JSON import
+    // ---------------------------------------------------------------
+
+    /**
+     * Lets the user pick a JSON file, searches it (up to 4 object
+     * levels deep) for `providerConnections` lists, groups the
+     * connections by their `providerSpecificData.prefix` — one
+     * provider receives all of its API keys — and imports them with
+     * the keys stored securely.
+     */
+    async importFromJsonFile(): Promise<void> {
+        const uris = await vscode.window.showOpenDialog({
+            canSelectMany: false,
+            canSelectFolders: false,
+            openLabel: 'Import',
+            title: 'Router Models: Import providers from JSON',
+            filters: {
+                'JSON files': ['json'],
+                'All files': ['*']
+            }
+        });
+
+        if (!uris || uris.length === 0) {
+            return;
+        }
+
+        const fileUri = uris[0];
+        const fileName = path.basename(fileUri.fsPath);
+
+        let content: string;
+
+        try {
+            content = await fs.readFile(fileUri.fsPath, 'utf8');
+        } catch (error) {
+            vscode.window.showErrorMessage(
+                `Router Models: could not read ${fileName} — ` +
+                    toErrorMessage(error)
+            );
+
+            return;
+        }
+
+        let parsed: unknown;
+
+        try {
+            parsed = JSON.parse(content);
+        } catch (error) {
+            vscode.window.showErrorMessage(
+                `Router Models: ${fileName} is not valid JSON — ` +
+                    toErrorMessage(error)
+            );
+
+            return;
+        }
+
+        const candidates = parseConnections(parsed);
+
+        if (candidates.length === 0) {
+            vscode.window.showWarningMessage(
+                `Router Models: no "providerConnections" list was found ` +
+                    `in ${fileName} (searched ` +
+                    `${MAX_SEARCH_DEPTH} levels deep).`
+            );
+
+            return;
+        }
+
+        // API keys that are already stored, for de-duplication.
+        const knownKeys = new Map<string, string>();
+
+        for (const provider of this.providers) {
+            for (const key of await this.getKeys(provider)) {
+                if (!knownKeys.has(key)) {
+                    knownKeys.set(key, provider.name);
+                }
+            }
+        }
+
+        const imported: string[] = [];
+        const skipped: { label: string; reason: string }[] = [];
+
+        await this.importCandidates(candidates, knownKeys,
+            imported, skipped
+        );
+
+        this.reportImportResult(fileName, imported, skipped);
+    }
+
+    /**
+     * Imports the parsed connections: those sharing a
+     * `providerSpecificData.prefix` belong to one upstream provider,
+     * so they are merged into a single provider that receives all of
+     * their API keys. Individual failures are collected, not fatal.
+     */
+    private async importCandidates(
+        candidates: ParsedConnection[],
+        knownKeys: Map<string, string>,
+        imported: string[],
+        skipped: { label: string; reason: string }[]
+    ): Promise<void> {
+        const groups = groupConnections(candidates);
+
+        await vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title:
+                    `Router Models: importing ${groups.length} ` +
+                    'provider(s) from JSON…',
+                cancellable: false
+            },
+            async progress => {
+                const step = 100 / groups.length;
+
+                for (const [index, group] of groups.entries()) {
+                    progress.report({
+                        increment: step,
+                        message:
+                            `(${index + 1}/${groups.length}) ` +
+                            group.name
+                    });
+
+                    if (group.apiKeys.length === 0) {
+                        skipped.push({
+                            label: group.name,
+                            reason:
+                                'no API key in the JSON ' +
+                                `(${group.connections} connection(s))`
+                        });
+
+                        continue;
+                    }
+
+                    // Drop keys that are already stored somewhere.
+                    const freshKeys = group.apiKeys.filter(
+                        key => !knownKeys.has(key)
+                    );
+
+                    if (freshKeys.length === 0) {
+                        skipped.push({
+                            label: group.name,
+                            reason:
+                                `all ${group.apiKeys.length} key(s) ` +
+                                'already imported as ' +
+                                `"${knownKeys.get(group.apiKeys[0])}"`
+                        });
+
+                        continue;
+                    }
+
+                    if (!group.baseUrl) {
+                        skipped.push({
+                            label: group.name,
+                            reason:
+                                'no base URL in the JSON ' +
+                                `(${group.connections} connection(s))`
+                        });
+
+                        continue;
+                    }
+
+                    try {
+                        const target = this.mergeTarget(
+                            group.id,
+                            group.name,
+                            group.baseUrl
+                        );
+
+                        if (target) {
+                            // Known provider: append the new keys.
+                            const existing =
+                                await this.getKeys(target);
+
+                            await this.updateProvider(target.id, {
+                                apiKeys: [...existing, ...freshKeys]
+                            });
+
+                            imported.push(
+                                `${group.name}: ` +
+                                    `+${freshKeys.length} new key(s)`
+                            );
+                        } else {
+                            const provider = await this.addProvider({
+                                name: this.uniqueImportName(group.name),
+                                id: group.id,
+                                baseUrl: group.baseUrl,
+                                apiKey: freshKeys.join('\n')
+                            });
+
+                            imported.push(
+                                `${provider.name} ` +
+                                    `(${freshKeys.length} key(s))`
+                            );
+                        }
+
+                        for (const key of freshKeys) {
+                            knownKeys.set(key, group.name);
+                        }
+                    } catch (error) {
+                        skipped.push({
+                            label: group.name,
+                            reason: toErrorMessage(error)
+                        });
+                    }
+                }
+            }
+        );
+    }
+
+    /**
+     * Existing provider a group should be merged into: same slug /
+     * id or same name AND the same endpoint — otherwise it is a
+     * different service that merely shares a name.
+     */
+    private mergeTarget(
+        id: string,
+        name: string,
+        baseUrl: string
+    ): ProviderConfig | undefined {
+        const requested = slugify(id);
+        const endpoint = this.normalizeBaseUrl(baseUrl);
+
+        return this.providers.find(
+            provider =>
+                (provider.id === requested ||
+                    provider.name.toLowerCase() ===
+                        name.toLowerCase()) &&
+                provider.baseUrl === endpoint
+        );
+    }
+
+    /** Import-time name that never clashes with existing providers. */
+    private uniqueImportName(base?: string): string {
+        const name = base?.trim() || 'Imported Provider';
+
+        const taken = (candidate: string): boolean =>
+            this.providers.some(
+                p => p.name.toLowerCase() === candidate.toLowerCase()
+            );
+
+        if (!taken(name)) {
+            return name;
+        }
+
+        let suffix = 2;
+
+        while (taken(`${name} ${suffix}`)) {
+            suffix++;
+        }
+
+        return `${name} ${suffix}`;
+    }
+
+    private reportImportResult(
+        fileName: string,
+        imported: string[],
+        skipped: { label: string; reason: string }[]
+    ): void {
+        if (imported.length === 0) {
+            const first = skipped[0];
+
+            vscode.window.showWarningMessage(
+                `Router Models: nothing was imported from ${fileName} — ` +
+                    `${skipped.length} connection(s) skipped` +
+                    (first
+                        ? ` (first: ${first.label} — ${first.reason})`
+                        : '') +
+                    '.'
+            );
+
+            return;
+        }
+
+        const shown = imported.slice(0, 5).join(', ');
+        const more =
+            imported.length > 5
+                ? ` … +${imported.length - 5} more`
+                : '';
+
+        vscode.window.showInformationMessage(
+            `Router Models: imported ${imported.length} provider(s) ` +
+                `from ${fileName} (${shown}${more})` +
+                (skipped.length > 0
+                    ? `, ${skipped.length} skipped`
+                    : '') +
+                '.'
+        );
     }
 
     async addProviderFlow(): Promise<void> {

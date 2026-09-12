@@ -334,3 +334,35 @@ body {
     color: var(--vscode-charts-green, #6bff9e);
 }
 
+/* ------------------------------------------------------------------ */
+/* Free model tag                                                      */
+/* ------------------------------------------------------------------ */
+
+.model .free-toggle {
+    background: none;
+    border: 1px solid var(--vscode-panel-border, #333);
+    color: var(--vscode-descriptionForeground);
+    border-radius: 6px;
+    padding: 0 5px;
+    font-size: 9px;
+    font-family: inherit;
+    line-height: 1.4;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.model .free-toggle:hover {
+    background: rgba(128, 128, 128, 0.2);
+}
+
+.model .free-toggle.active {
+    color: var(--vscode-charts-green, #6bff9e);
+    border-color: var(--vscode-charts-green, #6bff9e);
+}
+
+.modal input.checkbox {
+    width: auto;
+    margin: 2px 6px 2px 0;
+    vertical-align: middle;
+}
+

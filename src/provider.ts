@@ -57,12 +57,16 @@ export type ModelEntry = {
     max_input_tokens?: number;
     max_output_tokens?: number;
     manual?: boolean;
+    /** Set when the user tags the model as free. */
+    free?: boolean;
 };
 
 export type ModelSnapshot = {
     id: string;
     name?: string;
     manual: boolean;
+    /** True when tagged free or when the id / name contains "free". */
+    free: boolean;
     hidden: boolean;
     maxInputTokens: number;
     maxOutputTokens: number;
@@ -635,7 +639,8 @@ export class RouterProvider
     async addManualModel(
         providerId: string,
         modelId: string,
-        name?: string
+        name?: string,
+        free?: boolean
     ): Promise<void> {
         const provider = this.getProvider(providerId);
         const trimmedId = modelId.trim();
@@ -653,11 +658,23 @@ export class RouterProvider
             if (name?.trim()) {
                 existing.name = name.trim();
             }
+
+            if (free !== undefined) {
+                if (free) {
+                    existing.free = true;
+                } else {
+                    delete existing.free;
+                }
+            }
         } else {
             const entry: ModelEntry = { id: trimmedId, manual: true };
 
             if (name?.trim()) {
                 entry.name = name.trim();
+            }
+
+            if (free) {
+                entry.free = true;
             }
 
             entries.push(entry);
@@ -694,6 +711,42 @@ export class RouterProvider
         );
         await this.saveCache();
         this.fireChanged();
+    }
+
+    /**
+     * Tags / untags a model as free. Works for discovered and manual
+     * models alike; the flag survives model refreshes.
+     */
+    async setModelFree(
+        providerId: string,
+        modelId: string,
+        free: boolean
+    ): Promise<void> {
+        const provider = this.getProvider(providerId);
+        const entries = this.cache.get(providerId) ?? [];
+        const entry = entries.find(e => e.id === modelId);
+
+        if (!entry) {
+            throw new Error(
+                `"${modelId}" is not a model of ${provider.name}.`
+            );
+        }
+
+        if (free) {
+            entry.free = true;
+        } else {
+            delete entry.free;
+        }
+
+        this.cache.set(providerId, entries);
+        await this.saveCache();
+        this.fireChanged();
+
+        vscode.window.setStatusBarMessage(
+            `Router Models: "${modelId}" is now ` +
+                (free ? 'tagged as free.' : 'no longer tagged as free.'),
+            4000
+        );
     }
 
     // ---------------------------------------------------------------
@@ -1059,11 +1112,27 @@ export class RouterProvider
 
         try {
             const fetched = await this.fetchModels(provider);
-            const manual = (this.cache.get(id) ?? []).filter(
-                entry => entry.manual
+            const previous = this.cache.get(id) ?? [];
+            const manual = previous.filter(entry => entry.manual);
+
+            // Free tags the user set on discovered models survive a
+            // refresh (discovered entries are rebuilt from scratch).
+            const freeIds = new Set(
+                previous
+                    .filter(entry => entry.free && !entry.manual)
+                    .map(entry => entry.id)
             );
 
-            this.cache.set(id, [...fetched, ...manual]);
+            this.cache.set(
+                id,
+                fetched
+                    .map(entry =>
+                        freeIds.has(entry.id)
+                            ? { ...entry, free: true }
+                            : entry
+                    )
+                    .concat(manual)
+            );
             this.errors.delete(id);
             await this.saveCache();
             this.fireChanged();
@@ -1122,6 +1191,23 @@ export class RouterProvider
     // ---------------------------------------------------------------
     // Model filtering
     // ---------------------------------------------------------------
+
+    /**
+     * A model counts as free when the user tagged it or its id /
+     * display name already contains "free" (e.g. OpenRouter's `:free`
+     * variants) — free models get a "(free)" label in the model picker
+     * so they are easy to find.
+     */
+    private isFreeModel(model: ModelEntry): boolean {
+        if (model.free) {
+            return true;
+        }
+
+        return (
+            /\bfree\b/i.test(model.id) ||
+            /\bfree\b/i.test(model.name ?? '')
+        );
+    }
 
     isVisible(modelId: string): boolean {
         const config =
@@ -1217,6 +1303,7 @@ export class RouterProvider
                 id: model.id,
                 name: model.name,
                 manual: Boolean(model.manual),
+                free: this.isFreeModel(model),
                 hidden: !this.isVisible(model.id),
                 maxInputTokens: this.maxInputTokens(model),
                 maxOutputTokens: this.maxOutputTokens(model)
@@ -1939,11 +2026,35 @@ export class RouterProvider
             return;
         }
 
+        const freePick = await vscode.window.showQuickPick(
+            [
+                {
+                    label: 'No',
+                    description: 'Regular model'
+                },
+                {
+                    label: 'Yes',
+                    description:
+                        'Tag it "free" so typing "free" in the model ' +
+                        'picker finds it'
+                }
+            ],
+            {
+                placeHolder: 'Is this a free model?',
+                ignoreFocusOut: true
+            }
+        );
+
+        if (!freePick) {
+            return;
+        }
+
         try {
             await this.addManualModel(
                 provider.id,
                 modelId,
-                name || undefined
+                name || undefined,
+                freePick.label === 'Yes'
             );
         } catch (error) {
             vscode.window.showErrorMessage(toErrorMessage(error));
@@ -1982,14 +2093,21 @@ export class RouterProvider
                 continue;
             }
 
+            const baseName = value.model.name || value.model.id;
+            const free = this.isFreeModel(value.model);
+
             infos.push({
                 id: key,
-                name: value.model.name || value.model.id,
+                name: free && !/\bfree\b/i.test(baseName)
+                    ? `${baseName} (free)`
+                    : baseName,
                 family: value.provider.name,
                 version: '1.0',
                 maxInputTokens: this.maxInputTokens(value.model),
                 maxOutputTokens: this.maxOutputTokens(value.model),
-                tooltip: `${value.provider.name} • ${value.model.id}`,
+                tooltip: free
+                    ? `${value.provider.name} • ${value.model.id} • free`
+                    : `${value.provider.name} • ${value.model.id}`,
                 detail: value.provider.baseUrl,
                 capabilities: {
                     imageInput: false,

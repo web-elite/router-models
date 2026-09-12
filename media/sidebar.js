@@ -90,18 +90,25 @@
 
             var input;
 
-            if (field.multiline) {
-                input = document.createElement('textarea');
-                input.rows = field.rows || 4;
-            } else {
+            if (field.checkbox) {
                 input = document.createElement('input');
-                input.type = field.password ? 'password' : 'text';
-            }
+                input.type = 'checkbox';
+                input.className = 'checkbox';
+                input.checked = Boolean(field.value);
+            } else {
+                if (field.multiline) {
+                    input = document.createElement('textarea');
+                    input.rows = field.rows || 4;
+                } else {
+                    input = document.createElement('input');
+                    input.type = field.password ? 'password' : 'text';
+                }
 
-            input.value = field.value || '';
-            input.placeholder = field.placeholder || '';
-            input.autocomplete = 'off';
-            input.required = Boolean(field.required);
+                input.value = field.value || '';
+                input.placeholder = field.placeholder || '';
+                input.autocomplete = 'off';
+                input.required = Boolean(field.required);
+            }
 
             group.appendChild(label);
             group.appendChild(input);
@@ -141,7 +148,11 @@
             var values = {};
 
             for (var key in inputs) {
-                values[key] = inputs[key].value.trim();
+                var fieldInput = inputs[key];
+
+                values[key] = fieldInput.type === 'checkbox'
+                    ? fieldInput.checked
+                    : fieldInput.value.trim();
             }
 
             var onSubmit = modalState && modalState.onSubmit;
@@ -325,6 +336,11 @@
                     key: 'modelName',
                     label: 'Display name (optional)',
                     placeholder: 'DeepSeek Chat'
+                },
+                {
+                    key: 'free',
+                    label: 'Free model — gets a "(free)" label in the model picker',
+                    checkbox: true
                 }
             ],
             onSubmit: function (values) {
@@ -332,7 +348,8 @@
                     type: 'addModel',
                     providerId: provider.id,
                     modelId: values.modelId,
-                    modelName: values.modelName
+                    modelName: values.modelName,
+                    free: values.free === true
                 });
             }
         });
@@ -476,6 +493,15 @@
         html += '<span class="mid" title="' + esc(model.id) + '">' +
             esc(model.name || model.id) + '</span>';
 
+        html += '<button class="free-toggle' +
+            (model.free ? ' active' : '') + '" ' +
+            'data-action="toggle-free" ' +
+            'data-pid="' + esc(provider.id) + '" ' +
+            'data-mid="' + esc(model.id) + '" ' +
+            'title="Mark or unmark as free — free models are easy to ' +
+            'find by typing &quot;free&quot; in the model picker">' +
+            (model.free ? '&#10003; free' : '+ free') + '</button>';
+
         if (model.manual) {
             html += '<span class="tag">manual</span>';
             html += '<button class="del" data-action="del-model" ' +
@@ -559,6 +585,25 @@
                 providerId: provider.id,
                 modelId: button.getAttribute('data-mid')
             });
+        } else if (action === 'toggle-free') {
+            var modelId = button.getAttribute('data-mid');
+            var model = null;
+
+            for (var i = 0; i < provider.models.length; i++) {
+                if (provider.models[i].id === modelId) {
+                    model = provider.models[i];
+                    break;
+                }
+            }
+
+            if (model) {
+                post({
+                    type: 'toggleModelFree',
+                    providerId: provider.id,
+                    modelId: modelId,
+                    free: !model.free
+                });
+            }
         }
     });
 

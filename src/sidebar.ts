@@ -208,7 +208,17 @@ export class RouterSidebar
                     await this.provider.addManualModel(
                         String(message.providerId),
                         String(message.modelId ?? ''),
-                        this.str(message.modelName)
+                        this.str(message.modelName),
+                        message.free === true
+                    );
+                    await this.pushState();
+                    break;
+
+                case 'toggleModelFree':
+                    await this.provider.setModelFree(
+                        String(message.providerId),
+                        String(message.modelId ?? ''),
+                        message.free === true
                     );
                     await this.pushState();
                     break;

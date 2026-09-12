@@ -1,5 +1,7 @@
 <div align="center">
 
+[🇬🇧 English](README.md) | [🇮🇷 فارسی](README-fa.md)
+
 # 🚀 Router Models
 
 **Use any AI provider — OpenAI, OpenRouter, Groq, Ollama, LM Studio and
@@ -106,6 +108,24 @@ left activity bar — add, edit or remove providers with simple buttons.
 | LM Studio *(on your PC)* | `http://localhost:1234/v1` |
 
 Any other service that works with the "OpenAI format" will work too.
+
+---
+
+## 🏷️ Mark models as free
+
+Every model in the **Router Models** panel has a small **+ free** button.
+Click it to tag the model as free:
+
+- the sidebar shows a green **✓ free** badge next to the model,
+- in the Copilot model picker the model is listed as `Model name (free)`,
+  so typing **free** in the picker's search box lists all your free models
+  across every provider,
+- models whose id or name already contains "free" (like OpenRouter's
+  `:free` models) get the label automatically,
+- the flag is kept when you refresh the provider's model list.
+
+To remove the label, click the button again. The **+ Model** form and the
+`Router Models: Add Model Manually` command ask about the free tag too.
 
 ---
 

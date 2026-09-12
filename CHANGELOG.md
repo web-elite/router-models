@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Free model tagging: every model in the sidebar has a **+ free** toggle —
+  tagged models show a green **✓ free** badge and are listed as
+  `Name (free)` in the Copilot model picker, so typing "free" in the
+  picker's search box finds all free models across every provider.
+  Models whose id or name already contains "free" (e.g. OpenRouter's
+  `:free` variants) are tagged automatically, the flag survives model
+  refreshes, and the sidebar **+ Model** form (plus the
+  `Router Models: Add Model Manually` command) offers a free option too.
+
 ## [0.0.4] - 2026-09-11
 
 ### Added

@@ -1,99 +1,198 @@
-# Router Models — VS Code Extension
+<div align="center">
 
-Add any **OpenAI-compatible API provider** (OpenAI, OpenRouter, Groq, Together, Ollama, LM Studio, …) to the built-in **VS Code Chat / Copilot model picker**.
+# 🚀 Router Models
 
-Powered by the [`languageModelChatProviders`](https://code.visualstudio.com/updates/v1_104) contribution point (VS Code ≥ 1.104).
+**Use any AI provider — OpenAI, OpenRouter, Groq, Ollama, LM Studio and
+more — directly inside VS Code Copilot Chat.**
 
-## Features
+Bring your own API keys, pick your favorite models, and chat. It's free
+and open source.
 
-- 🔌 Register any OpenAI-compatible endpoint as a chat model provider in VS Code
-- 📦 Automatically discovers models from the provider's `/v1/models` endpoint
-- 🔐 API keys stored securely in VS Code **SecretStorage** (never in plain settings)
-- 🔑 **Multi-key support** — enter several keys per provider; requests rotate
-  round-robin and automatically fall back to the next key on `429` /
-  `500 / 502 / 503 / 504` / connection errors
-- ❄️ **Smart cooldown** — a rate-limited key rests for a configurable time
-  (per provider, default 60 s); a `Retry-After` header from the provider wins.
-  `401 / 403` burn a key (×) until it is replaced
-- 📊 **Live key monitor in the status bar** —
-  `Router: <model> ∣ Keys: N active ∣ Total: T ✓R 429:C ×B` — click for a menu
-  with per-key details, remaining cooldowns and a *Reset Cooldowns* action
-- 🔁 **Auto-retry on empty responses** — empty / cut streams (e.g. Gemini's
-  `delta: {}` endings) are retried automatically instead of showing
-  *"Sorry, no response was returned"*
-- 🧠 **Reasoning passthrough** — `reasoning_content` / `reasoning` / `thinking`
-  / `thought` output is surfaced instead of being dropped
-- 🛠️ **Full tool-calling support** — VS Code tool calls and tool results are
-  converted end to end, so Copilot Chat agents keep working
-- 🖼️ **Automatic favicon** — the provider's icon is fetched from its host
-  automatically (manual icon URL still wins)
-- 📥 **JSON import** — pick any JSON export containing `providerConnections`
-  (searched up to 4 levels deep); connections sharing a
-  `providerSpecificData.prefix` are merged into ONE provider with all of
-  their API keys (7 keys → one provider with 7 rotating keys), the prefix
-  becomes the provider id and `nodeName` its name, and keys that are
-  already known are skipped
-- 💾 Model list cached in `globalState` — available instantly after restart
-- 🗑️ Add / remove providers through a simple UI flow
-- ⏱️ Configurable request timeout and default temperature
+[![Release](https://img.shields.io/github/v/release/web-elite/router-models?label=Release&logo=github)](https://github.com/web-elite/router-models/releases/latest)
+[![VS Code](https://img.shields.io/badge/VS_Code-%3E%3D_1.104-blue?logo=visualstudiocode)](https://code.visualstudio.com/updates/v1_104)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/web-elite/router-models?style=social&label=%E2%AD%90%20Star%20us%21)](https://github.com/web-elite/router-models/stargazers)
 
-## Getting Started
+[⬇️ Download](https://github.com/web-elite/router-models/releases/latest) ·
+[🪲 Report a Problem](https://github.com/web-elite/router-models/issues)
 
-1. Install the extension.
-2. Open the Command Palette (`Ctrl+Shift+P`) and run **Router Models: Add Provider**.
-3. Enter:
-   - A provider **name** (e.g. `OpenAI`, `OpenRouter`)
-   - The **base URL** (e.g. `https://api.openai.com/v1`)
-   - One or more **API keys** (one per line, or comma separated) — optional
-   - An optional **cooldown** in seconds used after a `429`
-4. Open the Copilot Chat model picker — models from your provider appear under the **Router Models** vendor.
+</div>
 
-## Commands
+> [!IMPORTANT]
+> ## ⭐ Please give this project a star!
+>
+> **Router Models is 100% free.** If it's useful to you, the best way to say
+> thanks is a ⭐ **Star** on GitHub — it takes one second and helps other
+> people find the project.
+>
+> ### 👉 <https://github.com/web-elite/router-models> — hit the ★ button!
 
-| Command | Description |
+---
+
+## 🤔 What does it do?
+
+VS Code Copilot Chat normally only offers Microsoft's own models.
+**Router Models** lets you add your own AI providers and use **their**
+models in the same chat — right from the regular model picker.
+
+**Why you'll love it:**
+
+- 🔑 **Use several API keys together** — got multiple (free) keys? Paste them
+  all in. When one hits its limit, the next one takes over automatically.
+  No more "rate limit" interruptions.
+- ❄️ **No manual waiting** — if a key needs a break, the extension handles
+  the timing and switches to another key for you.
+- 🏠 **Works with local AI too** — use models running on your own computer
+  (Ollama, LM Studio) — no key needed at all.
+- 📊 **See what's happening** — a small indicator in the status bar shows
+  your keys' status at a glance.
+- 🔐 **Your keys stay safe** — they're stored in VS Code's secure storage,
+  never in plain text files.
+- 🧠 **Works with thinking models** and tool-using agents out of the box.
+
+---
+
+## 📦 How to Install
+
+### Option 1 — From the VS Code Marketplace *(easiest)*
+
+1. Open VS Code
+2. Click the **Extensions** icon on the left sidebar (or press `Ctrl+Shift+X`)
+3. Search for **Router Models**
+4. Click **Install**
+
+Or open this link in your browser and click Install:
+**<https://marketplace.visualstudio.com/items?itemName=web-elite.router-models>**
+
+### Option 2 — Download the file from GitHub
+
+1. Go to the
+   **[Releases page](https://github.com/web-elite/router-models/releases/latest)**
+   and download the file ending in **`.vsix`**
+2. Open VS Code → click the **Extensions** icon (`Ctrl+Shift+X`)
+3. Click the **⋯ menu** (top of the Extensions panel) → **Install from VSIX…**
+4. Choose the file you downloaded — done!
+
+> [!TIP]
+> With Option 2, VS Code won't update the extension automatically. To get
+> notified about new versions, click **Watch → Custom → Releases** on the
+> GitHub page.
+
+---
+
+## 🚀 How to Use
+
+1. Press `Ctrl+Shift+P` and type **Router Models: Add Provider**
+2. Fill in the simple form:
+   - **Name** — anything you like, e.g. `My OpenAI`
+   - **Base URL** — the provider's address (see the table below)
+   - **API keys** — one or more, each on a new line
+     *(skip this for local Ollama / LM Studio)*
+3. Open Copilot Chat, click the **model picker** at the top — your new
+   models are there under **Router Models**. Pick one and chat! 🎉
+
+You can also manage everything from the **Router Models panel** in the
+left activity bar — add, edit or remove providers with simple buttons.
+
+### 🌐 Ready-to-copy Base URLs
+
+| Provider | Base URL |
 | --- | --- |
-| `Router Models: Add Provider` | Register a new OpenAI-compatible provider |
-| `Router Models: Import Providers from JSON` | Pick a JSON file — `providerConnections` entries (found up to 4 levels deep) are imported one by one with their API keys |
-| `Router Models: Remove Provider` | Remove a configured provider (and its keys) |
-| `Router Models: Refresh Models` | Re-fetch the model list from all providers |
-| `Router Models: Show Key Status` | Open the key / cooldown monitor menu |
-| `Router Models: Reset Key Cooldowns` | Instantly clear all 429 cooldowns |
+| OpenAI | `https://api.openai.com/v1` |
+| OpenRouter | `https://openrouter.ai/api/v1` |
+| Groq | `https://api.groq.com/openai/v1` |
+| Together AI | `https://api.together.xyz/v1` |
+| Ollama *(on your PC)* | `http://localhost:11434/v1` |
+| LM Studio *(on your PC)* | `http://localhost:1234/v1` |
 
-## Extension Settings
+Any other service that works with the "OpenAI format" will work too.
 
-| Setting | Default | Description |
-| --- | --- | --- |
-| `routerModels.requestTimeoutMs` | `30000` | Timeout (ms) for the request handshake (streaming is never cut off) |
-| `routerModels.defaultTemperature` | `0.2` | Default temperature for chat completions |
-| `routerModels.defaultCooldownSeconds` | `60` | Cooldown a key rests after a `429` (per-provider override available) |
-| `routerModels.maxRetries` | `3` | Extra attempts with the next key on `429`/server errors/empty responses |
-| `routerModels.autoFavicon` | `true` | Auto-detect the provider favicon from its base URL |
-| `routerModels.showReasoning` | `true` | Surface reasoning / thinking output as visible text |
+---
 
-## Supported Endpoints
+## 📥 Import from a backup file (9router, omnirouter or any fork of 9router)
 
-Any service exposing the OpenAI Chat Completions API works out of the box:
+1. Run **`Router Models: Import Providers from JSON`** — or click the ⇩
+   button in the sidebar.
+2. Pick your `.json` backup file.
+3. That's it! All providers and API keys in the file are added
+   automatically — keys you already have are skipped, so nothing gets
+   duplicated. The model list fills in by itself.
 
-- OpenAI — `https://api.openai.com/v1`
-- OpenRouter — `https://openrouter.ai/api/v1`
-- Groq — `https://api.groq.com/openai/v1`
-- Together AI — `https://api.together.xyz/v1`
-- Ollama — `http://localhost:11434/v1`
-- LM Studio — `http://localhost:1234/v1`
+---
 
-## Building from Source
+## ❓ Common Questions
 
-```bash
-npm install
-npm run compile
-```
+<details>
+<summary><b>Where are my API keys stored?</b></summary>
+<br>
 
-Press `F5` in VS Code to launch an Extension Development Host, or package a VSIX:
+In VS Code's built-in secure storage — the same place VS Code keeps its own
+secrets. They never appear in your settings or project files.
+</details>
 
-```bash
-npx @vscode/vsce package
-```
+<details>
+<summary><b>I don't see my models in the chat picker</b></summary>
+<br>
 
-## License
+Click the status bar item (bottom left, starting with "Router") and choose
+**Refresh**, or run `Router Models: Refresh Models` from the command
+palette. Also make sure your VS Code is up to date (1.104 or newer).
+</details>
+
+<details>
+<summary><b>Do local providers like Ollama need a key?</b></summary>
+<br>
+
+No — just leave the key field empty.
+</details>
+
+<details>
+<summary><b>One of my keys stopped working</b></summary>
+<br>
+
+The extension marks broken keys automatically and stops using them. Open
+the status bar menu to see each key's status, or edit the provider to
+replace a key. You can also clear cooldowns with one click.
+</details>
+
+---
+
+## 🤝 Contribute
+
+Found a bug or have an idea?
+[Open an issue](https://github.com/web-elite/router-models/issues) —
+all kinds of contributions are welcome!
+
+---
+
+## ⭐ Support the Project
+
+> [!TIP]
+> **If Router Models saves you time or money, please give it a ⭐ Star!**
+>
+> Stars keep the project alive and help other developers discover it.
+>
+> **👉 [github.com/web-elite/router-models](https://github.com/web-elite/router-models)**
+
+Other ways to help:
+
+- 🪲 [Report bugs](https://github.com/web-elite/router-models/issues)
+- 💡 Suggest ideas for new features
+- 📣 Tell your friends and colleagues about it
+
+---
+
+## 📄 License
 
 [MIT](LICENSE) © Web Elite
+
+---
+
+<div align="center">
+
+**Made with ❤️ by [Web Elite](https://github.com/web-elite)**
+
+If this extension is useful to you, please consider giving it a ⭐ Star on
+GitHub — [it really helps!](https://github.com/web-elite/router-models/stargazers)
+
+</div>

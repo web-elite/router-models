@@ -334,6 +334,76 @@ body {
     color: var(--vscode-charts-green, #6bff9e);
 }
 
+.keys-list {
+    border-top: 1px solid var(--vscode-panel-border, #333);
+    padding: 6px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.key-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    padding: 2px 0;
+}
+
+.key-row:hover {
+    background: rgba(128, 128, 128, 0.12);
+}
+
+.key-status {
+    flex-shrink: 0;
+    font-size: 10px;
+    line-height: 1;
+}
+
+.key-status.ready {
+    color: var(--vscode-charts-green, #6bff9e);
+}
+
+.key-status.cooldown {
+    color: var(--vscode-charts-orange, #ffa64d);
+}
+
+.key-status.burned {
+    color: var(--vscode-errorForeground, #f66);
+}
+
+.key-name {
+    flex-shrink: 0;
+    max-width: 45%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.key-preview {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 11px;
+    color: var(--vscode-descriptionForeground);
+}
+
+.key-row .del {
+    background: none;
+    border: none;
+    color: var(--vscode-descriptionForeground);
+    cursor: pointer;
+    padding: 0 3px;
+    flex-shrink: 0;
+}
+
+.key-row .del:hover {
+    color: var(--vscode-errorForeground, #f66);
+}
+
 /* ------------------------------------------------------------------ */
 /* Free model tag                                                      */
 /* ------------------------------------------------------------------ */

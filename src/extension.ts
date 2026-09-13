@@ -35,6 +35,14 @@ export function activate(context: vscode.ExtensionContext) {
             () => provider.importFromJsonFile()
         ),
         vscode.commands.registerCommand(
+            'router-models.exportJson',
+            () => provider.exportToJsonFile()
+        ),
+        vscode.commands.registerCommand(
+            'router-models.reloadFromSync',
+            () => provider.reloadFromSyncFlow()
+        ),
+        vscode.commands.registerCommand(
             'router-models.editProvider',
             () => provider.editProviderFlow()
         ),

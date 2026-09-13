@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Export: `Router Models: Export Providers to JSON` (also a ⤒ button
+  in the sidebar header) writes every provider — endpoint, icon,
+  cooldown, models, manual entries and "free" tags, plus the
+  include/exclude patterns — to a JSON file. API keys can be included
+  (opt-in, written as plain text — keep the file private) or left out
+- Import of the extension's own export format: `Router Models:
+  Import Providers from JSON` detects `router-models-export` files
+  and offers **Merge** (adds new providers, merges keys and models,
+  skips duplicates) or **Replace** (confirmed full restore, including
+  the exported include/exclude patterns); exports written by a newer
+  version are imported best-effort
+- Settings Sync support: the provider list and the model cache
+  (manual models and "free" tags included) sync across machines
+  through VS Code Settings Sync (GitHub / Microsoft account). The new
+  `routerModels.syncApiKeys` setting (default `false`) additionally
+  mirrors the API keys into the synced state — key reads fall back to
+  the mirror and heal the local secure storage, and
+  `Router Models: Reload from Settings Sync` (or simply opening the
+  sidebar) picks up changes, since VS Code fires no event for synced
+  global state
+
 - Free model tagging: every model in the sidebar has a **+ free** toggle —
   tagged models show a green **✓ free** badge and are listed as
   `Name (free)` in the Copilot model picker, so typing "free" in the

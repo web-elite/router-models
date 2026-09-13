@@ -4,6 +4,10 @@
 const assert = require('assert');
 const {
     parseKeys,
+    parseNamedKeys,
+    mergeNamedKeys,
+    coerceNamedKeys,
+    namedKeysToInput,
     parseRetryAfter,
     previewKey,
     KeyManager,
@@ -49,6 +53,101 @@ test('parseKeys: dedupe + trim + ignore junk', () => {
     );
     assert.deepStrictEqual(parseKeys(42), []);
     assert.deepStrictEqual(parseKeys(null), []);
+});
+
+// ---------------------------------------------------------------
+// parseNamedKeys
+// ---------------------------------------------------------------
+
+test('parseNamedKeys: name | key lines', () => {
+    assert.deepStrictEqual(
+        parseNamedKeys('Main | sk-a\nBackup|sk-b'),
+        [
+            { key: 'sk-a', name: 'Main' },
+            { key: 'sk-b', name: 'Backup' }
+        ]
+    );
+});
+
+test('parseNamedKeys: one name, several keys + bare keys', () => {
+    assert.deepStrictEqual(
+        parseNamedKeys('Pool | sk-a, sk-b\nsk-c'),
+        [
+            { key: 'sk-a', name: 'Pool' },
+            { key: 'sk-b', name: 'Pool' },
+            { key: 'sk-c' }
+        ]
+    );
+});
+
+test('parseNamedKeys: dedupe + junk + non-string', () => {
+    assert.deepStrictEqual(
+        parseNamedKeys('Main | sk-a\nsk-a\n\n   \n'),
+        [{ key: 'sk-a', name: 'Main' }]
+    );
+    assert.deepStrictEqual(
+        parseNamedKeys('| sk-a'),
+        [{ key: 'sk-a' }]
+    );
+    assert.deepStrictEqual(parseNamedKeys(42), []);
+    assert.deepStrictEqual(parseNamedKeys(null), []);
+});
+
+// ---------------------------------------------------------------
+// mergeNamedKeys / coerceNamedKeys / namedKeysToInput
+// ---------------------------------------------------------------
+
+test('mergeNamedKeys: appends, keeps order, renames duplicates', () => {
+    const existing = [{ key: 'sk-a' }, { key: 'sk-b', name: 'Old' }];
+
+    assert.deepStrictEqual(
+        mergeNamedKeys(existing, [
+            { key: 'sk-c', name: 'New' },
+            { key: 'sk-a', name: 'Main' },
+            { key: 'sk-b' }
+        ]),
+        [
+            { key: 'sk-a', name: 'Main' },
+            { key: 'sk-b', name: 'Old' },
+            { key: 'sk-c', name: 'New' }
+        ]
+    );
+});
+
+test('mergeNamedKeys: does not mutate the input', () => {
+    const existing = [{ key: 'sk-a' }];
+
+    mergeNamedKeys(existing, [{ key: 'sk-b' }]);
+
+    assert.deepStrictEqual(existing, [{ key: 'sk-a' }]);
+});
+
+test('coerceNamedKeys: strings, objects and junk', () => {
+    assert.deepStrictEqual(
+        coerceNamedKeys([
+            'sk-a',
+            { key: 'sk-b', name: 'B' },
+            { key: 'sk-a' },
+            42,
+            null,
+            { name: 'no key' }
+        ]),
+        [{ key: 'sk-a' }, { key: 'sk-b', name: 'B' }]
+    );
+    assert.deepStrictEqual(coerceNamedKeys('sk-a'), []);
+    assert.deepStrictEqual(coerceNamedKeys(undefined), []);
+});
+
+test('namedKeysToInput: round-trips through parseNamedKeys', () => {
+    const keys = [
+        { key: 'sk-a', name: 'Main' },
+        { key: 'sk-b' }
+    ];
+
+    assert.deepStrictEqual(
+        parseNamedKeys(namedKeysToInput(keys)),
+        keys
+    );
 });
 
 // ---------------------------------------------------------------

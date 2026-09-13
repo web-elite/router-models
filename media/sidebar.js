@@ -208,10 +208,10 @@
                 },
                 {
                     key: 'apiKey',
-                    label: 'API keys (optional, one per line or comma separated)',
+                    label: 'API keys (optional — one per line: name | key)',
                     multiline: true,
                     rows: 4,
-                    placeholder: 'sk-…'
+                    placeholder: 'Main | sk-…\nBackup | sk-…\n… or a bare sk-…'
                 },
                 {
                     key: 'cooldownSeconds',
@@ -256,16 +256,6 @@
                     value: provider.baseUrl
                 },
                 {
-                    key: 'apiKey',
-                    label: 'API key' + (
-                        provider.hasKey
-                            ? ' (saved — type to replace)'
-                            : ' (none)'
-                    ),
-                    multiline: true,
-                    rows: 4
-                },
-                {
                     key: 'cooldownSeconds',
                     label: 'Cooldown seconds after 429 (empty = default)',
                     value: String(
@@ -296,10 +286,6 @@
                     patch.baseUrl = values.baseUrl;
                 }
 
-                if (values.apiKey) {
-                    patch.apiKey = values.apiKey;
-                }
-
                 // Empty input clears the per-provider override.
                 patch.cooldownSeconds =
                     values.cooldownSeconds === ''
@@ -315,6 +301,39 @@
                         type: 'updateProvider',
                         providerId: provider.id,
                         patch: patch
+                    });
+                }
+            }
+        });
+    }
+
+    /**
+     * Add-keys dialog: appends keys to the provider without ever
+     * touching the stored ones. One `name | key` entry per line.
+     */
+    function openAddKeysForm(provider) {
+        openModal({
+            title: 'Add API Keys to ' + provider.name,
+            submitLabel: 'Add Keys',
+            fields: [
+                {
+                    key: 'keys',
+                    label: 'One per line: name | key' + (
+                        provider.keys && provider.keys.total > 0
+                            ? ' — existing keys are kept'
+                            : ''
+                    ),
+                    multiline: true,
+                    rows: 6,
+                    placeholder: 'Main | sk-…\nBackup | sk-…\n… or a bare sk-…'
+                }
+            ],
+            onSubmit: function (values) {
+                if (values.keys) {
+                    post({
+                        type: 'addKeys',
+                        providerId: provider.id,
+                        keys: values.keys
                     });
                 }
             }
@@ -451,6 +470,20 @@
         }
 
         if (expanded) {
+            if (provider.keyList && provider.keyList.length) {
+                html += '<div class="keys-list">';
+
+                for (var k = 0; k < provider.keyList.length; k++) {
+                    html += renderKey(
+                        provider,
+                        provider.keyList[k],
+                        k
+                    );
+                }
+
+                html += '</div>';
+            }
+
             html += '<div class="models">';
 
             if (!provider.models.length) {
@@ -468,6 +501,8 @@
         html += '<div class="card-tools">';
         html += '<button class="btn secondary" data-action="edit" ' +
             'data-pid="' + esc(provider.id) + '">Edit</button>';
+        html += '<button class="btn secondary" data-action="add-keys" ' +
+            'data-pid="' + esc(provider.id) + '">+ Keys</button>';
         html += '<button class="btn secondary" data-action="refresh" ' +
             'data-pid="' + esc(provider.id) + '">Refresh</button>';
 
@@ -482,6 +517,41 @@
         html += '<button class="btn secondary" data-action="delete" ' +
             'data-pid="' + esc(provider.id) + '">Delete</button>';
         html += '</div></div>';
+
+        return html;
+    }
+
+    /** One stored key with its status and a delete button. */
+    function renderKey(provider, key, index) {
+        var status = key.status || 'ready';
+        var icon = status === 'burned' ? '&#10005;' : '&#9679;';
+        var title = status === 'ready'
+            ? 'ready'
+            : status === 'cooldown'
+                ? '429 — ' + Math.ceil(
+                      (key.cooldownRemainingMs || 0) / 1000
+                  ) + 's left'
+                : (key.lastError || 'authentication error');
+
+        var html = '<div class="key-row">';
+
+        html += '<span class="key-status ' + esc(status) +
+            '" title="' + esc(title) + '">' + icon + '</span>';
+
+        if (key.name) {
+            html += '<span class="key-name" title="' +
+                esc(key.name) + '">' + esc(key.name) + '</span>';
+        }
+
+        html += '<span class="key-preview">' +
+            esc(key.preview) + '</span>';
+
+        html += '<button class="del" data-action="del-key" ' +
+            'data-pid="' + esc(provider.id) + '" ' +
+            'data-index="' + index + '" ' +
+            'title="Remove this key">&#10005;</button>';
+
+        html += '</div>';
 
         return html;
     }
@@ -565,6 +635,14 @@
 
         if (action === 'edit') {
             openEditProviderForm(provider);
+        } else if (action === 'add-keys') {
+            openAddKeysForm(provider);
+        } else if (action === 'del-key') {
+            post({
+                type: 'removeKey',
+                providerId: provider.id,
+                index: Number(button.getAttribute('data-index'))
+            });
         } else if (action === 'refresh') {
             post({
                 type: 'refreshProvider',
@@ -613,6 +691,11 @@
     document.getElementById('btn-import')
         .addEventListener('click', function () {
             post({ type: 'importJson' });
+        });
+
+    document.getElementById('btn-export')
+        .addEventListener('click', function () {
+            post({ type: 'exportJson' });
         });
 
     document.getElementById('btn-refresh')

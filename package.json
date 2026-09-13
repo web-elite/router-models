@@ -2,7 +2,7 @@
   "name": "router-models",
   "displayName": "Router Models",
   "description": "Add OpenAI-compatible providers to VS Code Chat",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "publisher": "web-elite",
   "license": "MIT",
   "repository": {
@@ -71,6 +71,14 @@
       {
         "command": "router-models.importJson",
         "title": "Router Models: Import Providers from JSON"
+      },
+      {
+        "command": "router-models.exportJson",
+        "title": "Router Models: Export Providers to JSON"
+      },
+      {
+        "command": "router-models.reloadFromSync",
+        "title": "Router Models: Reload from Settings Sync"
       },
       {
         "command": "router-models.editProvider",
@@ -149,6 +157,11 @@
           "type": "boolean",
           "default": true,
           "description": "Surface reasoning / thinking output (reasoning_content, reasoning, thinking, thought) from models as visible text instead of dropping it."
+        },
+        "routerModels.syncApiKeys": {
+          "type": "boolean",
+          "default": false,
+          "description": "Also sync API keys across machines through VS Code Settings Sync (requires Settings Sync to be turned on with your GitHub / Microsoft account). When off, keys stay in each machine's secure storage and are never synced. Enabling this writes the keys into the Settings Sync backup."
         }
       }
     }

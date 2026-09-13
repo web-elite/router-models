@@ -43,6 +43,9 @@ export type KeyStats = {
     burned: number;
 };
 
+/** Per-key details plus the key's optional label, for UI display. */
+export type NamedKeyDetail = KeyDetail & { name?: string };
+
 export type PickedKey = {
     index: number;
     key: string;
@@ -71,26 +74,164 @@ export class ProviderHttpError extends Error {
 }
 
 /**
+ * One stored API key: the secret itself plus an optional free-form
+ * label the user gave it, e.g. `Work account | sk-…`.
+ */
+export type NamedKey = {
+    key: string;
+    name?: string;
+};
+
+/**
+ * Splits raw user input into named API keys. Accepted per line:
+ * `name | key` (also `name|key1, key2` — several keys may share a
+ * name) or a bare `key` without a name. Keys are additionally
+ * separated by commas / semicolons / whitespace, so the old plain-key
+ * input still works. Duplicates are removed while preserving order.
+ */
+export function parseNamedKeys(input: unknown): NamedKey[] {
+    if (typeof input !== 'string') {
+        return [];
+    }
+
+    const keys: NamedKey[] = [];
+
+    const push = (name: string | undefined, raw: string): void => {
+        const key = raw.trim();
+
+        if (key && !keys.some(entry => entry.key === key)) {
+            keys.push(name ? { key, name } : { key });
+        }
+    };
+
+    for (const line of input.split(/\r?\n/)) {
+        const trimmed = line.trim();
+
+        if (!trimmed) {
+            continue;
+        }
+
+        const separator = trimmed.indexOf('|');
+
+        if (separator === -1) {
+            for (const part of trimmed.split(/[\s,;]+/)) {
+                push(undefined, part);
+            }
+
+            continue;
+        }
+
+        const name = trimmed.slice(0, separator).trim();
+
+        for (const part of trimmed
+            .slice(separator + 1)
+            .split(/[\s,;]+/)) {
+            push(name || undefined, part);
+        }
+    }
+
+    return keys;
+}
+
+/** Key values only, in order (for round-robin selection and fetches). */
+export function namedKeyValues(named: NamedKey[]): string[] {
+    return named.map(entry => entry.key);
+}
+
+/**
+ * Accepts stored or imported key entries in any historical shape —
+ * plain strings, `{ key }` and `{ name, key }` objects — and returns
+ * a clean `NamedKey[]` (duplicates removed, order preserved).
+ */
+export function coerceNamedKeys(value: unknown): NamedKey[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    const keys: NamedKey[] = [];
+
+    for (const entry of value) {
+        if (typeof entry === 'string') {
+            const key = entry.trim();
+
+            if (key && !keys.some(k => k.key === key)) {
+                keys.push({ key });
+            }
+
+            continue;
+        }
+
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+            continue;
+        }
+
+        const record = entry as Record<string, unknown>;
+        const key =
+            typeof record['key'] === 'string'
+                ? record['key'].trim()
+                : '';
+
+        if (!key || keys.some(k => k.key === key)) {
+            continue;
+        }
+
+        const name =
+            typeof record['name'] === 'string'
+                ? record['name'].trim()
+                : '';
+
+        keys.push(name ? { key, name } : { key });
+    }
+
+    return keys;
+}
+
+/**
+ * Merges incoming keys into the stored list without ever removing
+ * existing keys: new key values are appended in order, and an
+ * incoming label renames the existing key with the same value.
+ */
+export function mergeNamedKeys(
+    existing: NamedKey[],
+    incoming: NamedKey[]
+): NamedKey[] {
+    const merged = existing.map(entry => ({ ...entry }));
+
+    for (const entry of incoming) {
+        const current = merged.find(
+            candidate => candidate.key === entry.key
+        );
+
+        if (current) {
+            if (entry.name) {
+                current.name = entry.name;
+            }
+
+            continue;
+        }
+
+        merged.push({ ...entry });
+    }
+
+    return merged;
+}
+
+/** Renders named keys back to the `name | key` input format. */
+export function namedKeysToInput(keys: NamedKey[]): string {
+    return keys
+        .map(entry =>
+            entry.name ? `${entry.name} | ${entry.key}` : entry.key
+        )
+        .join('\n');
+}
+
+/**
  * Splits a raw user input into a list of API keys. Keys may be entered
  * one per line, or separated by commas / semicolons / whitespace.
  * Duplicates are removed while preserving order.
  */
 export function parseKeys(input: unknown): string[] {
-    if (typeof input !== 'string') {
-        return [];
-    }
-
-    const keys: string[] = [];
-
-    for (const part of input.split(/[\s,;]+/)) {
-        const key = part.trim();
-
-        if (key && !keys.includes(key)) {
-            keys.push(key);
-        }
-    }
-
-    return keys;
+    return namedKeyValues(parseNamedKeys(input));
 }
 
 /** Masked preview like `sk-1…9f2a` (keeps head and tail). */

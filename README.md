@@ -140,6 +140,40 @@ To remove the label, click the button again. The **+ Model** form and the
 
 ---
 
+## 📤 Export your setup (backup & move to another PC)
+
+1. Run **`Router Models: Export Providers to JSON`** — or click the ⤒
+   button in the sidebar header.
+2. Choose whether to include the **API keys** — *with keys* means the
+   file restores your full setup anywhere (keep it private!), *without
+   keys* is safe to share.
+3. Save the file. Import it on any other machine with
+   **`Router Models: Import Providers from JSON`** — you can then
+   **merge** with the existing setup or **replace** it completely
+   (full restore). Endpoints, icons, cooldowns, manual models,
+   "free" tags and the include/exclude patterns all come along.
+
+---
+
+## ☁️ Keep work & home in sync automatically
+
+Router Models works with **VS Code Settings Sync** (your GitHub or
+Microsoft account):
+
+- Provider configs, model lists, manual models and "free" tags are
+  synced between your machines automatically.
+- API keys are **not** synced by default — they live in each
+  machine's secure storage. To sync them too, enable
+  **`routerModels.syncApiKeys`** in the settings on every machine
+  (keys then travel inside the encrypted Settings Sync backup).
+- Make sure Settings Sync itself is turned on (gear icon →
+  *Backing up and Syncing…* → sign in with GitHub/Microsoft).
+- After a sync, open the Router Models sidebar (or run
+  **`Router Models: Reload from Settings Sync`**) to pick up the
+  changes immediately.
+
+---
+
 ## ❓ Common Questions
 
 <details>

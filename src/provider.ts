@@ -4,14 +4,18 @@ import * as path from 'path';
 
 import {
     aggregateKeyStats,
+    coerceNamedKeys,
     isAuthFailure,
     isServerFallback,
-    parseKeys,
+    mergeNamedKeys,
+    namedKeyValues,
+    parseNamedKeys,
     parseRetryAfter,
     truncate,
-    KeyDetail,
     KeyManager,
     KeyStats,
+    NamedKey,
+    NamedKeyDetail,
     ProviderHttpError
 } from './keys';
 
@@ -84,9 +88,49 @@ export type ProviderSnapshot = {
     models: ModelSnapshot[];
     /** Multi-key statistics for this provider. */
     keys: KeyStats;
+    /** Per-key details (label + status), without raw key material. */
+    keyList: NamedKeyDetail[];
     /** Configured cooldown time in seconds. */
     cooldownSeconds: number;
 };
+
+/** One provider inside the extension's own JSON export format. */
+export type ExportedProvider = {
+    id?: string;
+    name: string;
+    baseUrl: string;
+    iconUrl?: string;
+    cooldownSeconds?: number;
+    /** API keys — plain strings or `{ name, key }` objects. */
+    apiKeys?: (string | { name?: string; key: string })[];
+    models?: ModelEntry[];
+};
+
+/** Shape of the file written by `Router Models: Export …`. */
+export type ExportFile = {
+    kind: string;
+    version: number;
+    exportedAt: string;
+    settings?: {
+        includePatterns?: string[];
+        excludePatterns?: string[];
+    };
+    providers: ExportedProvider[];
+};
+
+/** Recognizes the extension's own export format in a parsed JSON. */
+export function isRouterModelsExport(value: unknown): value is ExportFile {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return false;
+    }
+
+    const record = value as Record<string, unknown>;
+
+    return (
+        record['kind'] === 'router-models-export' &&
+        Array.isArray(record['providers'])
+    );
+}
 
 type ResolvedModel = {
     provider: ProviderConfig;
@@ -181,12 +225,23 @@ export class RouterProvider
     private static readonly KEYS_SECRET_PREFIX =
         'router-models.apiKeys.';
     private static readonly MAX_ICON_BYTES = 2 * 1024 * 1024;
+    /**
+     * globalState key holding the API-key mirror that participates in
+     * VS Code Settings Sync (SecretStorage itself is never synced).
+     */
+    private static readonly SYNC_KEYS_KEY = 'router-models.sync.keys';
+    /** Marker + version of the extension's own JSON export format. */
+    private static readonly EXPORT_KIND = 'router-models-export';
+    private static readonly EXPORT_VERSION = 1;
 
     private providers: ProviderConfig[] = [];
     private cache: Map<string, ModelEntry[]> = new Map();
     private errors: Map<string, string> = new Map();
     private resolved: Map<string, ResolvedModel> = new Map();
     private refreshing: Set<string> = new Set();
+
+    /** Mirrors the current `syncApiKeys` setting (key set applied). */
+    private syncKeysApplied = false;
 
     /** Runtime key state (cooldowns, burn marks) per provider. */
     private readonly keys = new KeyManager();
@@ -219,8 +274,20 @@ export class RouterProvider
             }
         });
 
+    /** Reacts to `routerModels.syncApiKeys` being toggled. */
+    private readonly syncWatcher =
+        vscode.workspace.onDidChangeConfiguration(event => {
+            if (
+                event.affectsConfiguration('routerModels.syncApiKeys')
+            ) {
+                void this.onSyncSettingChanged();
+            }
+        });
+
     constructor(private readonly context: vscode.ExtensionContext) {
         this.load();
+        this.syncKeysApplied = this.syncApiKeysEnabled();
+        this.applySyncKeys();
         void this.migrateLegacyData();
 
         // Cooldown / key-state changes refresh the sidebar and the
@@ -233,6 +300,7 @@ export class RouterProvider
 
         this.context.subscriptions.push(
             this.configWatcher,
+            this.syncWatcher,
             this.onDidChangeEmitter,
             this.onDidChangeStateEmitter
         );
@@ -274,6 +342,156 @@ export class RouterProvider
             RouterProvider.CACHE_KEY,
             Object.fromEntries(this.cache)
         );
+    }
+
+    // ---------------------------------------------------------------
+    // Settings Sync (work ↔ home machines)
+    // ---------------------------------------------------------------
+
+    private syncApiKeysEnabled(): boolean {
+        return vscode.workspace
+            .getConfiguration('routerModels')
+            .get<boolean>('syncApiKeys', false);
+    }
+
+    /**
+     * Declares which globalState keys participate in VS Code Settings
+     * Sync. `setKeysForSync` replaces the whole set, so it is rebuilt
+     * from the current setting on every call. The API-key mirror only
+     * joins the set when the user opted in.
+     */
+    private applySyncKeys(): void {
+        const keys = [
+            RouterProvider.PROVIDERS_KEY,
+            RouterProvider.CACHE_KEY
+        ];
+
+        if (this.syncKeysApplied) {
+            keys.push(RouterProvider.SYNC_KEYS_KEY);
+        }
+
+        this.context.globalState.setKeysForSync(keys);
+    }
+
+    /** Handles the user toggling `routerModels.syncApiKeys`. */
+    private async onSyncSettingChanged(): Promise<void> {
+        const enabled = this.syncApiKeysEnabled();
+
+        if (enabled === this.syncKeysApplied) {
+            return;
+        }
+
+        this.syncKeysApplied = enabled;
+        this.applySyncKeys();
+
+        if (enabled) {
+            // Backfill the synced mirror from the local secure
+            // storage; entries already mirrored from another machine
+            // (for providers without local keys) are preserved.
+            const mirror = this.readSyncMirror();
+
+            for (const provider of this.providers) {
+                const keys = await this.secretKeysFor(provider);
+
+                if (keys.length > 0) {
+                    mirror[provider.id] = keys;
+                }
+            }
+
+            await this.context.globalState.update(
+                RouterProvider.SYNC_KEYS_KEY,
+                mirror
+            );
+
+            vscode.window.setStatusBarMessage(
+                'Router Models: API keys will now sync through ' +
+                    'Settings Sync.',
+                6000
+            );
+        } else {
+            // Opt-out: drop the mirrored keys from the synced state.
+            // Local SecretStorage copies are kept untouched.
+            await this.context.globalState.update(
+                RouterProvider.SYNC_KEYS_KEY,
+                undefined
+            );
+
+            vscode.window.setStatusBarMessage(
+                'Router Models: the synced API-key mirror was removed.',
+                6000
+            );
+        }
+    }
+
+    /** Reads the synced key mirror (validated, never undefined). */
+    private readSyncMirror(): Record<string, NamedKey[]> {
+        const raw = this.context.globalState.get<
+            Record<string, unknown>
+        >(RouterProvider.SYNC_KEYS_KEY);
+
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+            return {};
+        }
+
+        const clean: Record<string, NamedKey[]> = {};
+
+        for (const [id, value] of Object.entries(raw)) {
+            // Accepts the current `{ name, key }` entries as well as
+            // the plain `string[]` mirrors written by older versions.
+            const named = coerceNamedKeys(value);
+
+            if (named.length > 0) {
+                clean[id] = named;
+            }
+        }
+
+        return clean;
+    }
+
+    /**
+     * Re-reads the persisted (and Settings-Sync-arrived) globalState
+     * into memory. VS Code does not fire an event when synced global
+     * state changes, so this is called on activation, when the
+     * sidebar becomes visible and by the reload command.
+     *
+     * @returns true when anything changed compared to memory.
+     */
+    async reloadFromSync(): Promise<boolean> {
+        const before = JSON.stringify({
+            providers: this.providers,
+            cache: Object.fromEntries(this.cache)
+        });
+
+        this.load();
+        this.syncKeysApplied = this.syncApiKeysEnabled();
+        this.applySyncKeys();
+
+        const after = JSON.stringify({
+            providers: this.providers,
+            cache: Object.fromEntries(this.cache)
+        });
+
+        if (before !== after) {
+            this.fireChanged();
+            return true;
+        }
+
+        return false;
+    }
+
+    /** Command flow around `reloadFromSync` with user feedback. */
+    async reloadFromSyncFlow(): Promise<void> {
+        const changed = await this.reloadFromSync();
+
+        if (changed) {
+            vscode.window.showInformationMessage(
+                'Router Models: providers reloaded from Settings Sync.'
+            );
+        } else {
+            vscode.window.showInformationMessage(
+                'Router Models: already up to date.'
+            );
+        }
     }
 
     private fireChanged(): void {
@@ -431,7 +649,10 @@ export class RouterProvider
         name: string;
         id?: string;
         baseUrl: string;
+        /** Raw input: one `name | key` entry per line. */
         apiKey?: string;
+        /** Explicit named key list (programmatic use). */
+        apiKeys?: NamedKey[];
         iconUrl?: string;
         cooldownSeconds?: number | null;
     }): Promise<ProviderConfig> {
@@ -468,7 +689,10 @@ export class RouterProvider
         this.providers.push(provider);
         await this.saveProviders();
 
-        const keys = parseKeys(input.apiKey);
+        const keys =
+            input.apiKeys && input.apiKeys.length > 0
+                ? coerceNamedKeys(input.apiKeys)
+                : parseNamedKeys(input.apiKey);
 
         if (keys.length > 0) {
             await this.storeKeys(id, keys);
@@ -494,15 +718,57 @@ export class RouterProvider
         return provider;
     }
 
+    /**
+     * Adds API keys to an existing provider without ever touching the
+     * stored ones: new key values are appended, a label on an incoming
+     * key renames the stored key with the same value.
+     *
+     * Input: one `name | key` entry per line (a bare key also works).
+     */
+    async addKeys(providerId: string, rawInput: string): Promise<void> {
+        const provider = this.getProvider(providerId);
+        const incoming = parseNamedKeys(rawInput);
+
+        if (incoming.length === 0) {
+            return;
+        }
+
+        await this.storeKeys(
+            providerId,
+            mergeNamedKeys(
+                await this.secretKeysFor(provider),
+                incoming
+            )
+        );
+    }
+
+    /** Removes the key at `index` (the order shown in the sidebar). */
+    async removeKeyAt(providerId: string, index: number): Promise<void> {
+        const provider = this.getProvider(providerId);
+        const keys = await this.secretKeysFor(provider);
+
+        if (
+            !Number.isInteger(index) ||
+            index < 0 ||
+            index >= keys.length
+        ) {
+            throw new Error('That key no longer exists.');
+        }
+
+        keys.splice(index, 1);
+
+        await this.storeKeys(providerId, keys);
+    }
+
     async updateProvider(
         id: string,
         patch: {
             name?: string;
             baseUrl?: string;
-            /** Raw input: one key per line, or comma separated. */
+            /** Raw input — added to the existing keys, never replaces them. */
             apiKey?: string | null;
-            /** Explicit key list (programmatic use). */
-            apiKeys?: string[] | null;
+            /** Explicit key list — added to the existing keys, never replaces them. */
+            apiKeys?: (string | NamedKey)[] | null;
             iconUrl?: string | null;
             cooldownSeconds?: number | null;
         }
@@ -541,17 +807,31 @@ export class RouterProvider
         }
 
         if (patch.apiKey !== undefined) {
-            const keys = parseKeys(patch.apiKey ?? '');
+            const incoming = parseNamedKeys(patch.apiKey ?? '');
 
-            await this.storeKeys(id, keys);
+            if (incoming.length > 0) {
+                await this.storeKeys(
+                    id,
+                    mergeNamedKeys(
+                        await this.secretKeysFor(provider),
+                        incoming
+                    )
+                );
+            }
         }
 
         if (patch.apiKeys !== undefined) {
-            const keys = parseKeys(
-                (patch.apiKeys ?? []).join('\n')
-            );
+            const incoming = coerceNamedKeys(patch.apiKeys ?? []);
 
-            await this.storeKeys(id, keys);
+            if (incoming.length > 0) {
+                await this.storeKeys(
+                    id,
+                    mergeNamedKeys(
+                        await this.secretKeysFor(provider),
+                        incoming
+                    )
+                );
+            }
         }
 
         if (patch.cooldownSeconds !== undefined) {
@@ -618,6 +898,20 @@ export class RouterProvider
             );
         } catch {
             // Best-effort cleanup.
+        }
+
+        // Remove the provider's entry from the synced mirror too.
+        if (this.syncKeysApplied) {
+            const mirror = this.readSyncMirror();
+
+            if (mirror[id]) {
+                delete mirror[id];
+
+                await this.context.globalState.update(
+                    RouterProvider.SYNC_KEYS_KEY,
+                    mirror
+                );
+            }
         }
 
         this.keys.clearStates(id);
@@ -860,27 +1154,22 @@ export class RouterProvider
         return controller.signal;
     }
 
-    private async getKeys(
+    /** Keys stored in this machine's SecretStorage only. */
+    private async secretKeysFor(
         provider: ProviderConfig
-    ): Promise<string[]> {
+    ): Promise<NamedKey[]> {
         const raw = await this.secrets.get(
             RouterProvider.KEYS_SECRET_PREFIX + provider.id
         );
 
         if (raw) {
             try {
-                const parsed: unknown = JSON.parse(raw);
+                // Accepts the current `{ name, key }` format as well
+                // as the old plain `string[]` entries.
+                const named = coerceNamedKeys(JSON.parse(raw));
 
-                if (Array.isArray(parsed)) {
-                    const keys = parsed.filter(
-                        (key): key is string =>
-                            typeof key === 'string' &&
-                            key.trim().length > 0
-                    );
-
-                    if (keys.length > 0) {
-                        return keys;
-                    }
+                if (named.length > 0) {
+                    return named;
                 }
             } catch {
                 // Corrupt entry: fall back to the legacy key.
@@ -892,12 +1181,65 @@ export class RouterProvider
             this.secretKey(provider.id)
         );
 
-        return legacy ? [legacy] : [];
+        return legacy ? [{ key: legacy }] : [];
+    }
+
+    /**
+     * Raw key values for requests (round-robin selection). Use
+     * `resolveNamedKeys` when the labels matter too.
+     */
+    private async getKeys(
+        provider: ProviderConfig
+    ): Promise<string[]> {
+        return namedKeyValues(await this.resolveNamedKeys(provider));
+    }
+
+    /** Named keys with the secret-storage + sync-mirror fallback. */
+    private async resolveNamedKeys(
+        provider: ProviderConfig
+    ): Promise<NamedKey[]> {
+        const named = await this.secretKeysFor(provider);
+
+        if (named.length > 0) {
+            return named;
+        }
+
+        // Synced-mirror fallback: this machine has not stored the
+        // keys yet, but Settings Sync has delivered them from
+        // another machine. Heal the local secure storage so future
+        // reads do not depend on the mirror.
+        if (this.syncKeysApplied) {
+            const mirrored = this.readSyncMirror()[provider.id];
+
+            if (mirrored && mirrored.length > 0) {
+                await this.healFromMirror(provider.id, mirrored);
+                return mirrored;
+            }
+        }
+
+        return [];
+    }
+
+    /** Writes keys delivered by Settings Sync into SecretStorage. */
+    private async healFromMirror(
+        providerId: string,
+        keys: NamedKey[]
+    ): Promise<void> {
+        try {
+            await this.secrets.store(
+                RouterProvider.KEYS_SECRET_PREFIX + providerId,
+                JSON.stringify(keys)
+            );
+
+            await this.secrets.delete(this.secretKey(providerId));
+        } catch {
+            // Best-effort: the mirror remains the fallback.
+        }
     }
 
     private async storeKeys(
         providerId: string,
-        keys: string[]
+        keys: NamedKey[]
     ): Promise<void> {
         if (keys.length > 0) {
             await this.secrets.store(
@@ -915,6 +1257,23 @@ export class RouterProvider
             await this.secrets.delete(this.secretKey(providerId));
         } catch {
             // Best-effort cleanup.
+        }
+
+        // Keep the synced mirror in step with the secret storage
+        // (only written while the user opted into key syncing).
+        if (this.syncKeysApplied) {
+            const mirror = this.readSyncMirror();
+
+            if (keys.length > 0) {
+                mirror[providerId] = keys;
+            } else {
+                delete mirror[providerId];
+            }
+
+            await this.context.globalState.update(
+                RouterProvider.SYNC_KEYS_KEY,
+                mirror
+            );
         }
 
         // The user re-saved the keys: give them a fresh start
@@ -1278,7 +1637,13 @@ export class RouterProvider
         const providers: ProviderSnapshot[] = [];
 
         for (const provider of this.providers) {
-            const keys = await this.getKeys(provider);
+            const namedKeys = await this.resolveNamedKeys(provider);
+            const keyDetails: NamedKeyDetail[] = this.keys
+                .snapshot(provider.id, namedKeyValues(namedKeys))
+                .map((detail, index) => ({
+                    ...detail,
+                    name: namedKeys[index]?.name
+                }));
 
             let iconFile = provider.iconFile;
             let iconData: string | undefined;
@@ -1318,12 +1683,11 @@ export class RouterProvider
                 iconUrl: provider.iconUrl,
                 iconFile,
                 iconData,
-                hasKey: keys.length > 0,
+                hasKey: namedKeys.length > 0,
                 error: this.errors.get(provider.id),
                 models,
-                keys: aggregateKeyStats(
-                    this.keys.snapshot(provider.id, keys)
-                ),
+                keys: aggregateKeyStats(keyDetails),
+                keyList: keyDetails,
                 cooldownSeconds: this.cooldownSecondsFor(provider)
             });
         }
@@ -1359,17 +1723,19 @@ export class RouterProvider
             ready: number;
             cooldown: number;
             burned: number;
-            keys: KeyDetail[];
+            keys: NamedKeyDetail[];
         }[]
     > {
         const details = [];
 
         for (const provider of this.providers) {
-            const keys = await this.getKeys(provider);
-            const snapshots = this.keys.snapshot(
-                provider.id,
-                keys
-            );
+            const namedKeys = await this.resolveNamedKeys(provider);
+            const snapshots: NamedKeyDetail[] = this.keys
+                .snapshot(provider.id, namedKeyValues(namedKeys))
+                .map((detail, index) => ({
+                    ...detail,
+                    name: namedKeys[index]?.name
+                }));
 
             details.push({
                 providerId: provider.id,
@@ -1483,6 +1849,15 @@ export class RouterProvider
                     'read) is not valid JSON — ' +
                     toErrorMessage(error)
             );
+
+            return;
+        }
+
+        // The extension's own export format is handled first: the
+        // generic `providerConnections` search below would find
+        // nothing in it.
+        if (isRouterModelsExport(parsed)) {
+            await this.importOwnExport(parsed, fileName);
 
             return;
         }
@@ -1601,12 +1976,11 @@ export class RouterProvider
                         );
 
                         if (target) {
-                            // Known provider: append the new keys.
-                            const existing =
-                                await this.getKeys(target);
-
+                            // Known provider: append the new keys
+                            // (updateProvider merges into the stored
+                            // keys, nothing is replaced).
                             await this.updateProvider(target.id, {
-                                apiKeys: [...existing, ...freshKeys]
+                                apiKeys: freshKeys
                             });
 
                             imported.push(
@@ -1618,7 +1992,7 @@ export class RouterProvider
                                 name: this.uniqueImportName(group.name),
                                 id: group.id,
                                 baseUrl: group.baseUrl,
-                                apiKey: freshKeys.join('\n')
+                                apiKeys: coerceNamedKeys(freshKeys)
                             });
 
                             imported.push(
@@ -1716,6 +2090,602 @@ export class RouterProvider
                 `from ${fileName} (${shown}${more})` +
                 (skipped.length > 0
                     ? `, ${skipped.length} skipped`
+                    : '') +
+                '.'
+        );
+    }
+
+    // ---------------------------------------------------------------
+    // JSON export
+    // ---------------------------------------------------------------
+
+    /**
+     * Writes every provider (endpoint, icon, cooldown, models and —
+     * optionally — the API keys) into a JSON file that
+     * `Router Models: Import Providers from JSON` understands, so the
+     * setup can be moved to another machine or kept as a backup.
+     */
+    async exportToJsonFile(): Promise<void> {
+        if (this.providers.length === 0) {
+            vscode.window.showInformationMessage(
+                'No providers to export. Use ' +
+                    '"Router Models: Add Provider" first.'
+            );
+
+            return;
+        }
+
+        const choice = await vscode.window.showQuickPick(
+            [
+                {
+                    label: 'Export WITHOUT API keys',
+                    description:
+                        'Providers and models only — safe to share',
+                    includeKeys: false
+                },
+                {
+                    label: 'Export WITH API keys',
+                    description:
+                        'Keys are written as plain text — keep the ' +
+                        'file private',
+                    includeKeys: true
+                }
+            ],
+            {
+                placeHolder:
+                    'Router Models: include the API keys in the export?',
+                ignoreFocusOut: true
+            }
+        );
+
+        if (!choice) {
+            return;
+        }
+
+        const exportFile = await this.buildExport(choice.includeKeys);
+        const stamp = new Date().toISOString().slice(0, 10);
+        const uri = await vscode.window.showSaveDialog({
+            defaultUri: vscode.Uri.file(
+                `router-models-export-${stamp}.json`
+            ),
+            title: 'Router Models: Export providers to JSON',
+            saveLabel: 'Export',
+            filters: {
+                'JSON files': ['json'],
+                'All files': ['*']
+            }
+        });
+
+        if (!uri) {
+            return;
+        }
+
+        try {
+            await fs.writeFile(
+                uri.fsPath,
+                JSON.stringify(exportFile, null, 2),
+                'utf8'
+            );
+        } catch (error) {
+            vscode.window.showErrorMessage(
+                'Router Models: could not write the export file — ' +
+                    toErrorMessage(error)
+            );
+
+            return;
+        }
+
+        vscode.window.showInformationMessage(
+            `Router Models: exported ${this.providers.length} ` +
+                `provider(s) to ${path.basename(uri.fsPath)} ` +
+                (choice.includeKeys
+                    ? 'including the API keys — keep the file private!'
+                    : 'without API keys.')
+        );
+    }
+
+    /** Collects everything worth exporting into the export format. */
+    private async buildExport(
+        includeKeys: boolean
+    ): Promise<ExportFile> {
+        const config =
+            vscode.workspace.getConfiguration('routerModels');
+        const providers: ExportedProvider[] = [];
+
+        for (const provider of this.providers) {
+            const entry: ExportedProvider = {
+                id: provider.id,
+                name: provider.name,
+                baseUrl: provider.baseUrl
+            };
+
+            if (provider.iconUrl) {
+                entry.iconUrl = provider.iconUrl;
+            }
+
+            if (typeof provider.cooldownSeconds === 'number') {
+                entry.cooldownSeconds = provider.cooldownSeconds;
+            }
+
+            if (includeKeys) {
+                const named = await this.resolveNamedKeys(provider);
+
+                if (named.length > 0) {
+                    entry.apiKeys = named.map(item =>
+                        item.name
+                            ? { name: item.name, key: item.key }
+                            : item.key
+                    );
+                }
+            }
+
+            const models = this.cache.get(provider.id);
+
+            if (models && models.length > 0) {
+                entry.models = models.map(model => ({ ...model }));
+            }
+
+            providers.push(entry);
+        }
+
+        return {
+            kind: RouterProvider.EXPORT_KIND,
+            version: RouterProvider.EXPORT_VERSION,
+            exportedAt: new Date().toISOString(),
+            settings: {
+                includePatterns: config.get<string[]>(
+                    'includePatterns',
+                    []
+                ),
+                excludePatterns: config.get<string[]>(
+                    'excludePatterns',
+                    []
+                )
+            },
+            providers
+        };
+    }
+
+    // ---------------------------------------------------------------
+    // Import of the extension's own export format
+    // ---------------------------------------------------------------
+
+    /**
+     * Imports a file written by this extension's export command. The
+     * user chooses between merging into the existing setup or
+     * replacing it entirely.
+     */
+    private async importOwnExport(
+        file: ExportFile,
+        fileName: string
+    ): Promise<void> {
+        if (
+            typeof file.version === 'number' &&
+            file.version > RouterProvider.EXPORT_VERSION
+        ) {
+            vscode.window.showWarningMessage(
+                `Router Models: ${fileName} was written by a newer ` +
+                    `export version (${file.version}) — importing ` +
+                    'best-effort.'
+            );
+        }
+
+        const valid = file.providers.filter(
+            entry =>
+                entry &&
+                typeof entry === 'object' &&
+                typeof entry.name === 'string' &&
+                entry.name.trim().length > 0 &&
+                typeof entry.baseUrl === 'string' &&
+                entry.baseUrl.trim().length > 0
+        );
+
+        const invalid = file.providers.length - valid.length;
+
+        if (valid.length === 0) {
+            vscode.window.showWarningMessage(
+                `Router Models: ${fileName} contains no importable ` +
+                    'providers (every entry needs a name and a base ' +
+                    'URL).'
+            );
+
+            return;
+        }
+
+        const mode = await vscode.window.showQuickPick(
+            [
+                {
+                    label: 'Merge with existing providers',
+                    description:
+                        'Adds new providers, merges keys and models, ' +
+                        'keeps everything already configured',
+                    value: 'merge'
+                },
+                {
+                    label: 'Replace all providers',
+                    description:
+                        'Removes every existing provider first — ' +
+                        'full restore',
+                    value: 'replace'
+                }
+            ],
+            {
+                placeHolder:
+                    `Router Models: import ${valid.length} ` +
+                    `provider(s) from ${fileName}`,
+                ignoreFocusOut: true
+            }
+        );
+
+        if (!mode) {
+            return;
+        }
+
+        const replace = mode.value === 'replace';
+
+        if (replace) {
+            const confirmed = await vscode.window.showWarningMessage(
+                `Replace ALL existing providers with the ` +
+                    `${valid.length} provider(s) from ${fileName}?`,
+                { modal: true },
+                'Replace'
+            );
+
+            if (confirmed !== 'Replace') {
+                return;
+            }
+
+            await this.clearAllProviders();
+
+            if (file.settings) {
+                await this.applyExportedSettings(file.settings);
+            }
+        }
+
+        let added = 0;
+        let updated = 0;
+        const skipped: { label: string; reason: string }[] = [];
+
+        await vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title:
+                    `Router Models: importing ${valid.length} ` +
+                    'provider(s)…',
+                cancellable: false
+            },
+            async progress => {
+                const step = 100 / valid.length;
+
+                for (const [index, entry] of valid.entries()) {
+                    progress.report({
+                        increment: step,
+                        message:
+                            `(${index + 1}/${valid.length}) ` +
+                            entry.name
+                    });
+
+                    try {
+                        const result = await this.importOneExported(
+                            entry,
+                            !replace
+                        );
+
+                        if (result === 'added') {
+                            added++;
+                        } else {
+                            updated++;
+                        }
+                    } catch (error) {
+                        skipped.push({
+                            label: entry.name,
+                            reason: toErrorMessage(error)
+                        });
+                    }
+                }
+            }
+        );
+
+        this.reportOwnImportResult(
+            fileName,
+            added,
+            updated,
+            skipped,
+            invalid
+        );
+    }
+
+    /**
+     * Imports one exported provider: adds it when new, otherwise
+     * merges endpoint, icon, cooldown, keys and models into the
+     * existing provider.
+     */
+    private async importOneExported(
+        entry: ExportedProvider,
+        merge: boolean
+    ): Promise<'added' | 'updated'> {
+        const name = entry.name.trim();
+        const baseUrl = this.normalizeBaseUrl(entry.baseUrl);
+        const keys = coerceNamedKeys(entry.apiKeys ?? []);
+
+        const target = merge
+            ? this.ownMergeTarget(entry.id, name)
+            : undefined;
+
+        if (target) {
+            // Merge into the stored keys — nothing is replaced.
+            await this.updateProvider(target.id, {
+                baseUrl,
+                apiKeys: keys,
+                ...(entry.iconUrl
+                    ? { iconUrl: entry.iconUrl }
+                    : {}),
+                ...(typeof entry.cooldownSeconds === 'number'
+                    ? { cooldownSeconds: entry.cooldownSeconds }
+                    : {})
+            });
+
+            if (entry.models?.length) {
+                await this.mergeExportedModels(
+                    target.id,
+                    entry.models
+                );
+            }
+
+            return 'updated';
+        }
+
+        const provider = await this.addProvider({
+            name: this.uniqueImportName(name),
+            id: entry.id,
+            baseUrl,
+            apiKeys: keys,
+            iconUrl: entry.iconUrl,
+            cooldownSeconds:
+                typeof entry.cooldownSeconds === 'number'
+                    ? entry.cooldownSeconds
+                    : null
+        });
+
+        if (entry.models?.length) {
+            await this.mergeExportedModels(provider.id, entry.models);
+        }
+
+        return 'added';
+    }
+
+    /**
+     * Existing provider an exported provider should merge into: the
+     * exact id wins, otherwise a case-insensitive name match.
+     */
+    private ownMergeTarget(
+        id: string | undefined,
+        name: string
+    ): ProviderConfig | undefined {
+        const requested = id ? slugify(id) : '';
+
+        if (requested) {
+            const byId = this.providers.find(
+                provider => provider.id === requested
+            );
+
+            if (byId) {
+                return byId;
+            }
+        }
+
+        const lower = name.toLowerCase();
+
+        return this.providers.find(
+            provider => provider.name.toLowerCase() === lower
+        );
+    }
+
+    /**
+     * Merges exported model entries into the cache: missing models
+     * are added, existing ones only gain missing flags (manual / free
+     * / names) — nothing the user configured locally is removed.
+     */
+    private async mergeExportedModels(
+        providerId: string,
+        models: ModelEntry[]
+    ): Promise<void> {
+        const entries = this.cache.get(providerId) ?? [];
+        let changed = false;
+
+        for (const model of models) {
+            if (!model || typeof model.id !== 'string') {
+                continue;
+            }
+
+            const id = model.id.trim();
+
+            if (!id) {
+                continue;
+            }
+
+            const existing = entries.find(entry => entry.id === id);
+
+            if (!existing) {
+                const copy: ModelEntry = { id };
+
+                if (
+                    typeof model.name === 'string' &&
+                    model.name.trim()
+                ) {
+                    copy.name = model.name.trim();
+                }
+
+                if (typeof model.context_length === 'number') {
+                    copy.context_length = model.context_length;
+                }
+
+                if (typeof model.max_input_tokens === 'number') {
+                    copy.max_input_tokens = model.max_input_tokens;
+                }
+
+                if (typeof model.max_output_tokens === 'number') {
+                    copy.max_output_tokens = model.max_output_tokens;
+                }
+
+                if (model.manual) {
+                    copy.manual = true;
+                }
+
+                if (model.free) {
+                    copy.free = true;
+                }
+
+                entries.push(copy);
+                changed = true;
+
+                continue;
+            }
+
+            if (model.manual && !existing.manual) {
+                existing.manual = true;
+                changed = true;
+            }
+
+            if (model.free && !existing.free) {
+                existing.free = true;
+                changed = true;
+            }
+
+            if (
+                !existing.name &&
+                typeof model.name === 'string' &&
+                model.name.trim()
+            ) {
+                existing.name = model.name.trim();
+                changed = true;
+            }
+
+            if (
+                !existing.context_length &&
+                typeof model.context_length === 'number'
+            ) {
+                existing.context_length = model.context_length;
+                changed = true;
+            }
+
+            if (
+                !existing.max_input_tokens &&
+                typeof model.max_input_tokens === 'number'
+            ) {
+                existing.max_input_tokens = model.max_input_tokens;
+                changed = true;
+            }
+
+            if (
+                !existing.max_output_tokens &&
+                typeof model.max_output_tokens === 'number'
+            ) {
+                existing.max_output_tokens = model.max_output_tokens;
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            this.cache.set(providerId, entries);
+            await this.saveCache();
+            this.fireChanged();
+        }
+    }
+
+    /** Removes every provider (secrets, icons, cache included). */
+    private async clearAllProviders(): Promise<void> {
+        for (const provider of this.providers) {
+            try {
+                await this.secrets.delete(this.secretKey(provider.id));
+                await this.secrets.delete(
+                    RouterProvider.KEYS_SECRET_PREFIX + provider.id
+                );
+            } catch {
+                // Best-effort cleanup.
+            }
+
+            this.keys.clearStates(provider.id);
+
+            await this.deleteIconFiles(provider.id).catch(() => {
+                // Best-effort cleanup.
+            });
+        }
+
+        this.providers = [];
+        this.cache.clear();
+        this.errors.clear();
+
+        if (this.syncKeysApplied) {
+            await this.context.globalState.update(
+                RouterProvider.SYNC_KEYS_KEY,
+                {}
+            );
+        }
+
+        await this.saveProviders();
+        await this.saveCache();
+        this.fireChanged();
+    }
+
+    /** Applies the include/exclude patterns from an export file. */
+    private async applyExportedSettings(
+        settings: NonNullable<ExportFile['settings']>
+    ): Promise<void> {
+        const config =
+            vscode.workspace.getConfiguration('routerModels');
+
+        if (Array.isArray(settings.includePatterns)) {
+            await config.update(
+                'includePatterns',
+                settings.includePatterns.filter(
+                    pattern => typeof pattern === 'string'
+                ),
+                vscode.ConfigurationTarget.Global
+            );
+        }
+
+        if (Array.isArray(settings.excludePatterns)) {
+            await config.update(
+                'excludePatterns',
+                settings.excludePatterns.filter(
+                    pattern => typeof pattern === 'string'
+                ),
+                vscode.ConfigurationTarget.Global
+            );
+        }
+    }
+
+    private reportOwnImportResult(
+        fileName: string,
+        added: number,
+        updated: number,
+        skipped: { label: string; reason: string }[],
+        invalid: number
+    ): void {
+        const parts: string[] = [];
+
+        if (added > 0) {
+            parts.push(`${added} added`);
+        }
+
+        if (updated > 0) {
+            parts.push(`${updated} updated`);
+        }
+
+        const summary =
+            parts.length > 0 ? parts.join(', ') : 'nothing changed';
+        const first = skipped[0];
+
+        vscode.window.showInformationMessage(
+            `Router Models: import from ${fileName} finished — ` +
+                `${summary}` +
+                (skipped.length > 0
+                    ? `, ${skipped.length} skipped (first: ` +
+                      `${first.label} — ${first.reason})`
+                    : '') +
+                (invalid > 0
+                    ? `, ${invalid} invalid entries ignored`
                     : '') +
                 '.'
         );

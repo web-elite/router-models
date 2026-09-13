@@ -4,7 +4,7 @@
 
 import * as vscode from 'vscode';
 import { RouterProvider } from './provider';
-import type { KeyDetail } from './keys';
+import type { NamedKeyDetail } from './keys';
 
 type ProviderKeySummary = {
     providerId: string;
@@ -13,7 +13,7 @@ type ProviderKeySummary = {
     ready: number;
     cooldown: number;
     burned: number;
-    keys: KeyDetail[];
+    keys: NamedKeyDetail[];
 };
 
 type MenuAction =
@@ -232,7 +232,9 @@ export class RouterStatusBar implements vscode.Disposable {
             }
 
             for (const key of detail.keys) {
-                const base = `$(key) ${key.preview}`;
+                const base = key.name
+                    ? `$(key) ${key.name} (${key.preview})`
+                    : `$(key) ${key.preview}`;
 
                 if (key.status === 'ready') {
                     entries.push({

@@ -3,6 +3,7 @@
   "displayName": "Router Models",
   "description": "Add OpenAI-compatible providers to VS Code Chat (Copilot) and route requests to different models based on their capabilities, cost, and availability.",
   "version": "0.1.2",
+  "icon": "media/icon.png",
   "publisher": "alireza-yaghouti",
   "license": "MIT",
   "repository": {

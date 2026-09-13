@@ -1,6 +1,6 @@
 <div dir="rtl" align="center">
 
-[🇬🇧 English](README.md) | [🇮🇷 فارسی](README-fa.md)
+[🇬🇧 English](README.md) | [☀️🦁 فارسی](README-fa.md)
 
 # 🚀 مدل‌های روتر (Router Models)
 
@@ -16,19 +16,19 @@
 [![GitHub Stars](https://img.shields.io/github/stars/web-elite/router-models?style=social&label=%E2%AD%90%20Star%20us%21)](https://github.com/web-elite/router-models/stargazers)
 
 [⬇️ دانلود](https://github.com/web-elite/router-models/releases/latest) ·
-[🪲 گزارش مشکل](https://github.com/web-elite/router-models/issues)
+[🐞 گزارش مشکل](https://github.com/web-elite/router-models/issues)
 
 </div>
 
-> [!IMPORTANT]
+> 
 > ## ⭐ لطفاً به این پروژه ستاره بدید!
 >
 > **مدل‌های روتر ۱۰۰٪ رایگانه.** اگر برات مفید بود، بهترین راه تشکر یه ⭐
 > **ستاره** توی گیت‌هابه — فقط یک ثانیه طول می‌کشه و به بقیه کمک می‌کنه
 > پروژه رو پیدا کنن.
 >
-> ### 👉 <https://github.com/web-elite/router-models> — دکمه ★ رو بزن!
-
+> ### 👉 [Github](https://github.com/web-elite/router-models) — دکمه ★ رو بزن!
+> 
 ---
 
 ## 🤔 چیکار می‌کنه؟
@@ -64,7 +64,7 @@ Copilot Chat وی‌‌اس‌کد معمولاً فقط مدل‌های خود 
 4. روی **Install** کلیک کن
 
 یا این لینک رو توی مرورگرت باز کن و روی Install کلیک کن:
-**<https://marketplace.visualstudio.com/items?itemName=web-elite.router-models>**
+**<https://marketplace.visualstudio.com/items?itemName=alireza-yaghouti.router-models>**
 
 ### روش ۲ — دانلود فایل از گیت‌هاب
 
@@ -231,7 +231,7 @@ Router Models با **VS Code Settings Sync** (اکانت GitHub یا Microsoft
 
 راه‌های دیگه کمک:
 
-- 🪲 [گزارش باگ](https://github.com/web-elite/router-models/issues)
+- 🐞 [گزارش باگ](https://github.com/web-elite/router-models/issues)
 - 💡 پیشنهاد ایده برای قابلیت‌های جدید
 - 📣 به دوستان و همکارات درباره‌ش بگو
 

@@ -63,7 +63,7 @@ models in the same chat — right from the regular model picker.
 4. Click **Install**
 
 Or open this link in your browser and click Install:
-**<https://marketplace.visualstudio.com/items?itemName=web-elite.router-models>**
+**<https://marketplace.visualstudio.com/items?itemName=alireza-yaghouti.router-models>**
 
 ### Option 2 — Download the file from GitHub
 
@@ -229,7 +229,7 @@ all kinds of contributions are welcome!
 
 Other ways to help:
 
-- 🪲 [Report bugs](https://github.com/web-elite/router-models/issues)
+- 🐞 [Report bugs](https://github.com/web-elite/router-models/issues)
 - 💡 Suggest ideas for new features
 - 📣 Tell your friends and colleagues about it
 

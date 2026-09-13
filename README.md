@@ -1,6 +1,6 @@
 <div align="center">
 
-[🇬🇧 English](README.md) | [🇮🇷 فارسی](README-fa.md)
+[🇬🇧 English](README.md) | [☀️🦁 فارسی](README-fa.md)
 
 # 🚀 Router Models
 
@@ -16,20 +16,19 @@ and open source.
 [![GitHub Stars](https://img.shields.io/github/stars/web-elite/router-models?style=social&label=%E2%AD%90%20Star%20us%21)](https://github.com/web-elite/router-models/stargazers)
 
 [⬇️ Download](https://github.com/web-elite/router-models/releases/latest) ·
-[🪲 Report a Problem](https://github.com/web-elite/router-models/issues)
+[🐞 Report a Problem](https://github.com/web-elite/router-models/issues)
 
 </div>
 
-> [!IMPORTANT]
+>  
 > ## ⭐ Please give this project a star!
 >
 > **Router Models is 100% free.** If it's useful to you, the best way to say
 > thanks is a ⭐ **Star** on GitHub — it takes one second and helps other
 > people find the project.
 >
-> ### 👉 <https://github.com/web-elite/router-models> — hit the ★ button!
-
----
+> ### 👉 [Github](https://github.com/web-elite/router-models)  — hit the ★ button!
+>  
 
 ## 🤔 What does it do?
 

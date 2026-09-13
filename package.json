@@ -38,7 +38,9 @@
       {
         "vendor": "router-models",
         "displayName": "Router Models",
-        "managementCommand": "router-models.manage"
+        "management": {
+          "command": "router-models.manage"
+        }
       }
     ],
     "viewsContainers": {
@@ -55,7 +57,8 @@
         {
           "type": "webview",
           "id": "router-models.sidebar",
-          "name": "Router Models"
+          "name": "Router Models",
+          "icon": ""
         }
       ]
     },

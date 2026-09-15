@@ -3203,18 +3203,40 @@ export class RouterProvider
                     !isAuthFailure(status) &&
                     !isServerFallback(status)
                 ) {
-                    throw error;
+                    throw this.wrapFinalError(error, selected);
                 }
 
                 lastError = error;
             }
         }
 
-        throw lastError instanceof Error
-            ? lastError
-            : new Error(
-                  'The chat request failed: ' + String(lastError)
-              );
+        throw this.wrapFinalError(lastError, selected);
+    }
+
+    /**
+     * Wraps the last error from all retry attempts into a clean,
+     * user-friendly message that includes the provider name, model id,
+     * and a parsed version of the HTTP error body.
+     */
+    private wrapFinalError(
+        error: unknown,
+        selected: ResolvedModel
+    ): Error {
+        const providerName = selected.provider.name;
+        const modelId = selected.model.id;
+        const prefix = `[${providerName}] ${modelId}: `;
+
+        if (error instanceof ProviderHttpError) {
+            return new Error(prefix + error.message);
+        }
+
+        if (error instanceof Error) {
+            return new Error(prefix + error.message);
+        }
+
+        return new Error(
+            prefix + 'The chat request failed: ' + String(error)
+        );
     }
 
     /**

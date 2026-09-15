@@ -63,13 +63,73 @@ export class ProviderHttpError extends Error {
         body?: string
     ) {
         super(
-            `HTTP ${status}` + (body ? `: ${truncate(body, 300)}` : '')
+            ProviderHttpError.buildMessage(status, body)
         );
 
         this.name = 'ProviderHttpError';
         this.status = status;
         this.retryAfterSeconds = retryAfterSeconds;
         this.body = body;
+    }
+
+    /**
+     * Turns a raw HTTP error into a short, human-readable message.
+     *
+     * Many OpenAI-compatible providers return JSON like:
+     *   { "error": { "code": "model_not_found", "message": "…", "type": "…" } }
+     *
+     * Instead of dumping the whole blob we extract the meaningful
+     * fields and present them on separate lines.
+     */
+    private static buildMessage(status: number, body?: string): string {
+        const statusLabel = `HTTP ${status}`;
+
+        if (!body) {
+            return statusLabel;
+        }
+
+        // Try to parse the body as JSON and extract useful fields.
+        const parsed = ProviderHttpError.tryParseJson(body);
+
+        if (parsed) {
+            const parts: string[] = [];
+
+            // Common OpenAI-style: { error: { message, code, type } }
+            const errObj: Record<string, unknown> =
+                typeof parsed.error === 'object' && parsed.error !== null
+                    ? parsed.error as Record<string, unknown>
+                    : parsed;
+
+            if (typeof errObj.message === 'string' && errObj.message) {
+                parts.push(errObj.message);
+            }
+
+            if (typeof errObj.code === 'string' && errObj.code) {
+                parts.push(`Code: ${errObj.code}`);
+            }
+
+            if (typeof errObj.type === 'string' && errObj.type) {
+                parts.push(`Type: ${errObj.type}`);
+            }
+
+            if (parts.length > 0) {
+                return `${statusLabel}: ${parts.join(' · ')}`;
+            }
+        }
+
+        // Fallback: show a truncated version of the raw body.
+        return `${statusLabel}: ${truncate(body, 300)}`;
+    }
+
+    private static tryParseJson(text: string): Record<string, unknown> | undefined {
+        try {
+            const obj = JSON.parse(text);
+            return typeof obj === 'object' && obj !== null
+                ? obj as Record<string, unknown>
+                : undefined;
+        } catch {
+            return undefined;
+        }
     }
 }
 

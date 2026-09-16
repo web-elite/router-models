@@ -582,7 +582,7 @@
         // Danger group
         html += '<button class="tool-btn danger" data-action="delete" ' +
             'data-pid="' + esc(provider.id) +
-            '" title="Remove this provider">&#128465;</button>';
+            '" title="Remove this provider">&#10005;</button>';
         html += '</div></div>';
 
         return html;

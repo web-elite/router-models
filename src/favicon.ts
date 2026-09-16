@@ -60,12 +60,19 @@ export async function discoverFavicon(
 
     const root = `${origin.protocol}//${origin.host}`;
 
+    // When the host is a subdomain (e.g. `api.site.com`), strip it and
+    // resolve the favicon from the main domain (`site.com`).
+    const mainHost = origin.hostname.split('.').slice(-2).join('.');
+    const mainRoot = `${origin.protocol}//${mainHost}`;
+    const faviconRoot =
+        mainHost === origin.hostname ? root : mainRoot;
+
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
         try {
-            const response = await fetch(root + '/', {
+            const response = await fetch(faviconRoot + '/', {
                 signal: controller.signal,
                 headers: { 'user-agent': USER_AGENT }
             });

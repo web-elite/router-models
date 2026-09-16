@@ -161,7 +161,9 @@ export function parseConnections(root: unknown): ParsedConnection[] {
 
         const nodeName = firstNonEmptyString(specific['nodeName']);
 
-        const prefix = firstNonEmptyString(specific['prefix']);
+        const prefix = firstNonEmptyString(specific['prefix']
+            
+        );
 
         const source = firstNonEmptyString(record['provider']);
 

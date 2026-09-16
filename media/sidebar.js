@@ -492,7 +492,7 @@
         html += '<span class="slider"></span></label>';
 
         html += '<span class="badge">' +
-            provider.models.length + '</span>';
+            provider.models.length + 'Models</span>';
 
         if (provider.error && !disabled) {
             html += '<span class="badge err" title="' +

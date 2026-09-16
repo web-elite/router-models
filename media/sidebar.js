@@ -34,6 +34,49 @@
         }, 8000);
     }
 
+    /**
+     * Turns a raw provider error into a short, human-readable line.
+     * Extracts the meaningful message from JSON error bodies and
+     * strips request-id noise.
+     */
+    function formatError(raw) {
+        if (!raw) {
+            return 'Unknown error';
+        }
+
+        // Try to pull the message out of a JSON body like
+        // HTTP 503: {"error":{"message":"…","code":"…"}}
+        var msg = raw;
+
+        var jsonStart = raw.indexOf('{');
+
+        if (jsonStart !== -1) {
+            try {
+                var obj = JSON.parse(raw.slice(jsonStart));
+                var errObj = obj && typeof obj === 'object'
+                    ? (obj.error && typeof obj.error === 'object'
+                        ? obj.error : obj)
+                    : null;
+
+                if (errObj && errObj.message) {
+                    msg = errObj.message;
+                }
+            } catch (_) {
+                // not JSON — keep raw
+            }
+        }
+
+        // Strip trailing request-id noise like (request id: abc123)
+        msg = msg.replace(/\s*\(request\s*id:[^)]*\)\s*/gi, '');
+
+        // Keep it short
+        if (msg.length > 120) {
+            msg = msg.slice(0, 117) + '…';
+        }
+
+        return msg;
+    }
+
     function findProvider(id) {
         for (var i = 0; i < snapshot.providers.length; i++) {
             if (snapshot.providers[i].id === id) {
@@ -420,8 +463,9 @@
 
     function renderProvider(provider) {
         var expanded = expandedId === provider.id;
+        var disabled = provider.disabled;
 
-        var html = '<div class="card">';
+        var html = '<div class="card' + (disabled ? ' disabled' : '') + '">';
 
         html += '<div class="card-head" data-action="toggle" ' +
             'data-pid="' + esc(provider.id) + '">';
@@ -432,10 +476,25 @@
         }
 
         html += '<span class="name">' + esc(provider.name) + '</span>';
+
+        if (disabled) {
+            html += '<span class="tag disabled-tag">off</span>';
+        }
+
+        // Enable / disable toggle switch
+        html += '<label class="switch" data-action="toggle-disabled" ' +
+            'data-pid="' + esc(provider.id) + '" ' +
+            'title="' + (disabled ? 'Enable provider' : 'Disable provider') +
+            '" tabindex="0">';
+        html += '<input type="checkbox" ' +
+            (disabled ? '' : 'checked') + ' ' +
+            'data-switch="' + esc(provider.id) + '" tabindex="-1">';
+        html += '<span class="slider"></span></label>';
+
         html += '<span class="badge">' +
             provider.models.length + '</span>';
 
-        if (provider.error) {
+        if (provider.error && !disabled) {
             html += '<span class="badge err" title="' +
                 esc(provider.error) + '">!</span>';
         }
@@ -464,9 +523,13 @@
 
         html += '</div>';
 
-        if (provider.error) {
-            html += '<div class="card-error">' +
-                esc(provider.error) + '</div>';
+        if (provider.error && !disabled) {
+            var friendlyError = formatError(provider.error);
+            html += '<div class="card-error" title="' +
+                esc(provider.error) + '">' +
+                '<span class="card-error-icon">⚠</span>' +
+                '<span class="card-error-text">' +
+                esc(friendlyError) + '</span></div>';
         }
 
         if (expanded) {
@@ -499,23 +562,27 @@
         }
 
         html += '<div class="card-tools">';
-        html += '<button class="btn secondary" data-action="edit" ' +
-            'data-pid="' + esc(provider.id) + '">Edit</button>';
-        html += '<button class="btn secondary" data-action="add-keys" ' +
-            'data-pid="' + esc(provider.id) + '">+ Keys</button>';
-        html += '<button class="btn secondary" data-action="refresh" ' +
-            'data-pid="' + esc(provider.id) + '">Refresh</button>';
+        // Primary group
+        html += '<button class="tool-btn" data-action="edit" ' +
+            'data-pid="' + esc(provider.id) + '" title="Edit name, base URL, icon">Edit</button>';
+        html += '<button class="tool-btn" data-action="add-keys" ' +
+            'data-pid="' + esc(provider.id) + '" title="Add API keys">+ Keys</button>';
+        html += '<button class="tool-btn" data-action="add-model" ' +
+            'data-pid="' + esc(provider.id) + '" title="Add a manual model">+ Model</button>';
+        html += '<button class="tool-btn" data-action="refresh" ' +
+            'data-pid="' + esc(provider.id) + '" title="Re-discover models">&#8635; Refresh</button>';
 
         if (provider.keys && provider.keys.cooldown > 0) {
-            html += '<button class="btn secondary" ' +
+            html += '<button class="tool-btn warn" ' +
                 'data-action="reset-cooldowns" ' +
                 'data-pid="' + esc(provider.id) +
-                '">Reset 429</button>';
+                '" title="Clear all 429 cooldowns">Reset 429</button>';
         }
-        html += '<button class="btn secondary" data-action="add-model" ' +
-            'data-pid="' + esc(provider.id) + '">+ Model</button>';
-        html += '<button class="btn secondary" data-action="delete" ' +
-            'data-pid="' + esc(provider.id) + '">Delete</button>';
+
+        // Danger group
+        html += '<button class="tool-btn danger" data-action="delete" ' +
+            'data-pid="' + esc(provider.id) +
+            '" title="Remove this provider">&#128465;</button>';
         html += '</div></div>';
 
         return html;
@@ -596,6 +663,33 @@
 
     root.addEventListener('click', function (event) {
         var target = event.target;
+
+        // Switch handles its own toggle — don't bubble to card expand
+        var switchLabel = target.closest('.switch[data-action="toggle-disabled"]');
+
+        if (switchLabel) {
+            event.preventDefault();
+            var spid = switchLabel.getAttribute('data-pid');
+
+            if (spid) {
+                var sp = findProvider(spid);
+
+                if (sp) {
+                    var checkbox = switchLabel.querySelector('input[data-switch]');
+
+                    if (checkbox) {
+                        checkbox.checked = !sp.disabled;
+                    }
+
+                    post({
+                        type: 'toggleDisabled',
+                        providerId: sp.id
+                    });
+                }
+            }
+
+            return;
+        }
 
         var button = target.closest('[data-action]');
 
@@ -725,6 +819,4 @@
 
     post({ type: 'ready' });
 })();
-
-
 

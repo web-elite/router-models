@@ -260,6 +260,13 @@ export class RouterSidebar
                     await this.pushState();
                     break;
 
+                case 'toggleDisabled':
+                    await this.provider.toggleDisabled(
+                        String(message.providerId)
+                    );
+                    await this.pushState();
+                    break;
+
                 case 'openSettings':
                     await vscode.commands.executeCommand(
                         'workbench.action.openSettings',

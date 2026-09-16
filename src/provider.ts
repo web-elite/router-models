@@ -50,8 +50,12 @@ export type ProviderConfig = {
     baseUrl: string;
     iconUrl?: string;
     iconFile?: string;
+    /** True when `iconUrl` was auto-detected, not entered manually. */
+    iconAuto?: boolean;
     /** Cooldown time in seconds a key rests after a 429. */
     cooldownSeconds?: number;
+    /** When true the provider is hidden from the model picker. */
+    disabled?: boolean;
 };
 
 export type ModelEntry = {
@@ -85,6 +89,7 @@ export type ProviderSnapshot = {
     iconData?: string;
     hasKey: boolean;
     error?: string;
+    disabled: boolean;
     models: ModelSnapshot[];
     /** Multi-key statistics for this provider. */
     keys: KeyStats;
@@ -848,9 +853,12 @@ export class RouterProvider
 
             if (iconUrl) {
                 provider.iconUrl = iconUrl;
+                // A manually entered URL always takes precedence over auto.
+                provider.iconAuto = undefined;
                 iconChanged = true;
-            } else if (provider.iconUrl) {
+            } else if (provider.iconUrl || provider.iconAuto) {
                 provider.iconUrl = undefined;
+                provider.iconAuto = undefined;
                 iconChanged = true;
             }
         }
@@ -866,6 +874,8 @@ export class RouterProvider
                     );
                 });
             } else {
+                provider.iconFile = undefined;
+                provider.iconAuto = undefined;
                 await this.deleteIconFiles(id);
                 await this.saveProviders();
             }
@@ -874,6 +884,16 @@ export class RouterProvider
         this.fireChanged();
 
         if (baseUrlChanged) {
+            // An auto-detected icon now points at the old host: refresh it.
+            // A manual icon URL is left untouched.
+            if (provider.iconAuto) {
+                provider.iconUrl = undefined;
+                provider.iconAuto = undefined;
+                provider.iconFile = undefined;
+                await this.deleteIconFiles(id);
+                await this.saveProviders();
+            }
+
             if (!provider.iconUrl) {
                 // New host: look for its favicon in the background.
                 void this.tryAutoFavicon(provider);
@@ -928,6 +948,14 @@ export class RouterProvider
         vscode.window.showInformationMessage(
             `${provider.name} removed.`
         );
+    }
+
+    async toggleDisabled(id: string): Promise<void> {
+        const provider = this.getProvider(id);
+
+        provider.disabled = !provider.disabled;
+        await this.saveProviders();
+        this.fireChanged();
     }
 
     async addManualModel(
@@ -1121,18 +1149,20 @@ export class RouterProvider
             .getConfiguration('routerModels')
             .get<boolean>('autoFavicon', true);
 
-        if (!enabled || provider.iconUrl) {
+        // A manually entered icon always wins — never overwrite it.
+        if (!enabled || provider.iconUrl && !provider.iconAuto) {
             return;
         }
 
         try {
             const iconUrl = await discoverFavicon(provider.baseUrl);
 
-            if (!iconUrl || provider.iconUrl) {
+            if (!iconUrl || (provider.iconUrl && !provider.iconAuto)) {
                 return;
             }
 
             provider.iconUrl = iconUrl;
+            provider.iconAuto = true;
             await this.saveProviders();
             this.onDidChangeStateEmitter.fire();
 
@@ -1620,6 +1650,10 @@ export class RouterProvider
         this.resolved.clear();
 
         for (const provider of this.providers) {
+            if (provider.disabled) {
+                continue;
+            }
+
             for (const model of this.modelsFor(provider)) {
                 this.resolved.set(`${provider.id}:${model.id}`, {
                     provider,
@@ -1685,6 +1719,7 @@ export class RouterProvider
                 iconData,
                 hasKey: namedKeys.length > 0,
                 error: this.errors.get(provider.id),
+                disabled: Boolean(provider.disabled),
                 models,
                 keys: aggregateKeyStats(keyDetails),
                 keyList: keyDetails,
@@ -1888,12 +1923,22 @@ export class RouterProvider
 
         const imported: string[] = [];
         const skipped: { label: string; reason: string }[] = [];
+        const noKey: string[] = [];
+        const alreadyKnown: string[] = [];
+        const failed: { label: string; reason: string }[] = [];
 
         await this.importCandidates(candidates, knownKeys,
-            imported, skipped
+            imported, skipped, noKey, alreadyKnown, failed
         );
 
-        this.reportImportResult(fileName, imported, skipped);
+        this.reportImportResult(
+            fileName,
+            imported,
+            skipped,
+            noKey,
+            alreadyKnown,
+            failed
+        );
     }
 
     /**
@@ -1906,7 +1951,10 @@ export class RouterProvider
         candidates: ParsedConnection[],
         knownKeys: Map<string, string>,
         imported: string[],
-        skipped: { label: string; reason: string }[]
+        skipped: { label: string; reason: string }[],
+        noKey: string[],
+        alreadyKnown: string[],
+        failed: { label: string; reason: string }[]
     ): Promise<void> {
         const groups = groupConnections(candidates);
 
@@ -1930,6 +1978,7 @@ export class RouterProvider
                     });
 
                     if (group.apiKeys.length === 0) {
+                        noKey.push(group.name);
                         skipped.push({
                             label: group.name,
                             reason:
@@ -1946,6 +1995,7 @@ export class RouterProvider
                     );
 
                     if (freshKeys.length === 0) {
+                        alreadyKnown.push(group.name);
                         skipped.push({
                             label: group.name,
                             reason:
@@ -1959,6 +2009,12 @@ export class RouterProvider
 
                     if (!group.baseUrl) {
                         skipped.push({
+                            label: group.name,
+                            reason:
+                                'no base URL in the JSON ' +
+                                `(${group.connections} connection(s))`
+                        });
+                        failed.push({
                             label: group.name,
                             reason:
                                 'no base URL in the JSON ' +
@@ -2005,13 +2061,113 @@ export class RouterProvider
                             knownKeys.set(key, group.name);
                         }
                     } catch (error) {
+                        const reason = toErrorMessage(error);
                         skipped.push({
                             label: group.name,
-                            reason: toErrorMessage(error)
+                            reason
+                        });
+                        failed.push({
+                            label: group.name,
+                            reason
                         });
                     }
                 }
             }
+        );
+    }
+
+    /**
+     * Reports the import outcome in a category-aware way:
+     *
+     * - Something was imported → success info message.
+     * - Only "no key" and "already known" → informational message that
+     *   tells the user WHY (exported without keys / nothing new to add).
+     * - Real failures → warning with the first failure detail.
+     */
+    private reportImportResult(
+        fileName: string,
+        imported: string[],
+        skipped: { label: string; reason: string }[],
+        noKey: string[],
+        alreadyKnown: string[],
+        failed: { label: string; reason: string }[]
+    ): void {
+        // Build a short "first few" helper for any list.
+        const showFew = (list: string[], max = 4): string => {
+            const shown = list.slice(0, max).join(', ');
+            return list.length > max
+                ? `${shown} … +${list.length - max} more`
+                : shown;
+        };
+
+        // Collect real failure messages (exclude the alreadyKnown /
+        // noKey cases, which are expected, not errors).
+        const firstFailure = failed[0];
+
+        if (imported.length > 0) {
+            const shown = showFew(imported);
+            const more =
+                imported.length > 4
+                    ? ` … +${imported.length - 4} more`
+                    : '';
+            const parts: string[] = [
+                `imported ${imported.length} provider(s) from ${fileName} ` +
+                    `(${shown}${more})`
+            ];
+            if (skipped.length > 0) {
+                parts.push(`${skipped.length} skipped`);
+            }
+            if (failed.length > 0) {
+                parts.push(
+                    `${failed.length} failed ` +
+                        `(first: ${firstFailure.label} — ` +
+                        `${firstFailure.reason})`
+                );
+            }
+            vscode.window.showInformationMessage(
+                `Router Models: ${parts.join(', ')}.`
+            );
+            return;
+        }
+
+        // Nothing was imported — explain why, per category.
+        if (noKey.length > 0 || alreadyKnown.length > 0) {
+            const parts: string[] = [];
+
+            if (noKey.length > 0) {
+                parts.push(
+                    `${noKey.length} provider(s) have no API key in this ` +
+                        `backup (${showFew(noKey)}) — export WITH keys ` +
+                        `to import them`
+                );
+            }
+            if (alreadyKnown.length > 0) {
+                parts.push(
+                    `${alreadyKnown.length} provider(s) already exist with ` +
+                        `the same keys (${showFew(alreadyKnown)})`
+                );
+            }
+            if (failed.length > 0) {
+                parts.push(
+                    `${failed.length} failed (first: ${firstFailure.label} ` +
+                        `— ${firstFailure.reason})`
+                );
+            }
+
+            vscode.window.showInformationMessage(
+                `Router Models: ${parts.join('; ')}.`
+            );
+            return;
+        }
+
+        // Only real failures (or empty file) → warning.
+        vscode.window.showWarningMessage(
+            `Router Models: nothing was imported from ${fileName} — ` +
+                `${skipped.length} connection(s) skipped` +
+                (failed.length > 0
+                    ? ` (first: ${failed[0].label} — ${failed[0].reason})`
+                    : '') +
+                '.'
         );
     }
 
@@ -2057,42 +2213,6 @@ export class RouterProvider
         }
 
         return `${name} ${suffix}`;
-    }
-
-    private reportImportResult(
-        fileName: string,
-        imported: string[],
-        skipped: { label: string; reason: string }[]
-    ): void {
-        if (imported.length === 0) {
-            const first = skipped[0];
-
-            vscode.window.showWarningMessage(
-                `Router Models: nothing was imported from ${fileName} — ` +
-                    `${skipped.length} connection(s) skipped` +
-                    (first
-                        ? ` (first: ${first.label} — ${first.reason})`
-                        : '') +
-                    '.'
-            );
-
-            return;
-        }
-
-        const shown = imported.slice(0, 5).join(', ');
-        const more =
-            imported.length > 5
-                ? ` … +${imported.length - 5} more`
-                : '';
-
-        vscode.window.showInformationMessage(
-            `Router Models: imported ${imported.length} provider(s) ` +
-                `from ${fileName} (${shown}${more})` +
-                (skipped.length > 0
-                    ? `, ${skipped.length} skipped`
-                    : '') +
-                '.'
-        );
     }
 
     // ---------------------------------------------------------------

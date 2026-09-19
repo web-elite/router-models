@@ -267,6 +267,14 @@ export class RouterProvider
         'router-models.free-models';
     /** Environment variable that overrides the URL setting. */
     private static readonly FREE_MODELS_ENV = 'ROUTER_MODELS_FREE_URL';
+    /**
+     * globalState key remembering that the user hid the
+     * free-providers banner at the bottom of the provider list.
+     */
+    private static readonly OFFERS_BANNER_KEY =
+        'router-models.offers-banner-hidden';
+    /** Site that curates free AI providers, shown in the banner. */
+    public static readonly OFFERS_URL = 'https://offers.webelitee.ir';
     private static readonly SECRET_PREFIX = 'router-models.apiKey.';
     /**
      * SecretStorage key holding the JSON array of API keys
@@ -296,6 +304,9 @@ export class RouterProvider
     private freeModelsTimer: ReturnType<typeof setInterval> | undefined;
     /** Prevents overlapping automatic free-models downloads. */
     private refreshingFreeModels = false;
+
+    /** Whether the user hid the free-providers banner. */
+    private offersBannerHidden = false;
 
     /** Mirrors the current `syncApiKeys` setting (key set applied). */
     private syncKeysApplied = false;
@@ -425,6 +436,12 @@ export class RouterProvider
                 // download repopulates it.
             }
         }
+
+        this.offersBannerHidden = Boolean(
+            this.context.globalState.get<boolean>(
+                RouterProvider.OFFERS_BANNER_KEY
+            )
+        );
     }
 
     private async saveProviders(): Promise<void> {
@@ -439,6 +456,21 @@ export class RouterProvider
             RouterProvider.CACHE_KEY,
             Object.fromEntries(this.cache)
         );
+    }
+
+    /**
+     * Shows or hides the free-providers banner. The choice is kept
+     * across sessions.
+     */
+    async setOffersBannerHidden(hidden: boolean): Promise<void> {
+        this.offersBannerHidden = hidden;
+
+        await this.context.globalState.update(
+            RouterProvider.OFFERS_BANNER_KEY,
+            hidden
+        );
+
+        this.fireChanged();
     }
 
     // ---------------------------------------------------------------
@@ -1989,6 +2021,7 @@ export class RouterProvider
     async getSnapshot(): Promise<{
         providers: ProviderSnapshot[];
         freeModels: ReturnType<RouterProvider['freeModelsStatus']>;
+        offersBannerHidden: boolean;
     }> {
         const providers: ProviderSnapshot[] = [];
 
@@ -2049,7 +2082,11 @@ export class RouterProvider
             });
         }
 
-        return { providers, freeModels: this.freeModelsStatus() };
+        return {
+            providers,
+            freeModels: this.freeModelsStatus(),
+            offersBannerHidden: this.offersBannerHidden
+        };
     }
 
     // ---------------------------------------------------------------

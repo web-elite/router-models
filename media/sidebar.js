@@ -520,6 +520,33 @@
             'title="Download the latest free-models list">Update</button>';
     }
 
+    /**
+     * Banner at the end of the provider list pointing at the site
+     * that curates free AI providers. The user can hide it; a small
+     * link stays available to bring it back.
+     */
+    function renderOffersBanner() {
+        if (snapshot.offersBannerHidden) {
+            return '<div class="offers-restore">' +
+                '<button class="offers-restore-btn" ' +
+                'data-action="offers-show" ' +
+                'title="Show the free-providers banner again">' +
+                '&#127873; Free providers</button>' +
+                '</div>';
+        }
+
+        return '<div class="offers-banner">' +
+            '<span class="offers-emoji">&#127873;</span>' +
+            '<span class="offers-text">Looking for free AI providers? ' +
+            'Browse the curated list of free endpoints and models.' +
+            '</span>' +
+            '<button class="offers-link" data-action="offers-visit" ' +
+            'title="Open offers.webelitee.ir">offers.webelitee.ir</button>' +
+            '<button class="offers-close" data-action="offers-hide" ' +
+            'title="Hide this banner">&#10005;</button>' +
+            '</div>';
+    }
+
     function render() {
         renderFreeStatus();
 
@@ -532,7 +559,8 @@
                 '<button class="btn" data-action="add-provider">' +
                 '+ Add Provider</button> ' +
                 '<button class="btn secondary" data-action="import-json">' +
-                '&#10515; Import JSON</button></div>';
+                '&#10515; Import JSON</button></div>' +
+                renderOffersBanner();
             return;
         }
 
@@ -543,6 +571,8 @@
         for (var i = 0; i < snapshot.providers.length; i++) {
             html += renderProvider(snapshot.providers[i]);
         }
+
+        html += renderOffersBanner();
 
         root.innerHTML = html;
     }
@@ -792,6 +822,21 @@
 
         if (action === 'import-json') {
             post({ type: 'importJson' });
+            return;
+        }
+
+        if (action === 'offers-visit') {
+            post({ type: 'openOffersSite' });
+            return;
+        }
+
+        if (action === 'offers-hide') {
+            post({ type: 'hideOffersBanner' });
+            return;
+        }
+
+        if (action === 'offers-show') {
+            post({ type: 'showOffersBanner' });
             return;
         }
 

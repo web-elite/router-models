@@ -620,3 +620,88 @@ body {
     color: var(--vscode-textLink-activeForeground, #75beff);
 }
 
+/* ------------------------------------------------------------------ */
+/* Free-providers banner (end of the provider list)                    */
+/* ------------------------------------------------------------------ */
+
+.offers-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+    padding: 10px 12px;
+    border: 1px solid var(--vscode-panel-border, #333);
+    border-radius: 6px;
+    background: var(--vscode-editorWidget-background,
+        rgba(128, 128, 128, 0.08));
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.offers-banner .offers-emoji {
+    font-size: 16px;
+    flex-shrink: 0;
+}
+
+.offers-banner .offers-text {
+    flex: 1;
+    min-width: 0;
+    color: var(--vscode-foreground);
+}
+
+.offers-banner .offers-link {
+    background: var(--vscode-button-background, #0e639c);
+    color: var(--vscode-button-foreground, #fff);
+    border: none;
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.offers-banner .offers-link:hover {
+    background: var(--vscode-button-hoverBackground, #1177bb);
+}
+
+.offers-banner .offers-close {
+    background: transparent;
+    border: none;
+    color: var(--vscode-descriptionForeground);
+    cursor: pointer;
+    padding: 2px 4px;
+    font-size: 12px;
+    line-height: 1;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+.offers-banner .offers-close:hover {
+    color: var(--vscode-errorForeground, #f66);
+    background: var(--vscode-toolbar-hoverBackground,
+        rgba(128, 128, 128, 0.12));
+}
+
+/* Small link left behind once the banner is hidden. */
+.offers-restore {
+    margin-top: 6px;
+    text-align: center;
+}
+
+.offers-restore-btn {
+    background: transparent;
+    border: none;
+    color: var(--vscode-descriptionForeground);
+    cursor: pointer;
+    font-size: 11px;
+    font-family: inherit;
+    padding: 4px 8px;
+    border-radius: 4px;
+    text-decoration: underline;
+}
+
+.offers-restore-btn:hover {
+    color: var(--vscode-textLink-foreground, #4daafc);
+}
+

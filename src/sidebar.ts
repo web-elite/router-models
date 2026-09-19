@@ -286,6 +286,22 @@ export class RouterSidebar
                     );
                     break;
 
+                case 'hideOffersBanner':
+                    await this.provider.setOffersBannerHidden(true);
+                    await this.pushState();
+                    break;
+
+                case 'showOffersBanner':
+                    await this.provider.setOffersBannerHidden(false);
+                    await this.pushState();
+                    break;
+
+                case 'openOffersSite':
+                    await vscode.env.openExternal(
+                        vscode.Uri.parse(RouterProvider.OFFERS_URL)
+                    );
+                    break;
+
                 default:
                     break;
             }

@@ -3189,7 +3189,7 @@ export class RouterProvider
             infos.push({
                 id: key,
                 name: free && !/\bfree\b/i.test(baseName)
-                    ? `${baseName} (free)`
+                    ? `${baseName} (free) - ${value.provider.name}`
                     : baseName,
                 family: value.provider.name,
                 version: '1.0',

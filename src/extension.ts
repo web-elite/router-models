@@ -59,6 +59,10 @@ export function activate(context: vscode.ExtensionContext) {
             () => provider.refreshAll()
         ),
         vscode.commands.registerCommand(
+            'router-models.refreshFreeModels',
+            () => provider.refreshFreeModelsFlow()
+        ),
+        vscode.commands.registerCommand(
             'router-models.resetCooldowns',
             () => provider.resetCooldowns()
         )

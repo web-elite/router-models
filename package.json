@@ -101,6 +101,10 @@
         "title": "Router Models: Refresh Models"
       },
       {
+        "command": "router-models.refreshFreeModels",
+        "title": "Router Models: Detect Free Models"
+      },
+      {
         "command": "router-models.statusMenu",
         "title": "Router Models: Show Key Status"
       },
@@ -178,6 +182,23 @@
           "type": "boolean",
           "default": false,
           "description": "Also sync API keys across machines through VS Code Settings Sync (requires Settings Sync to be turned on with your GitHub / Microsoft account). When off, keys stay in each machine's secure storage and are never synced. Enabling this writes the keys into the Settings Sync backup."
+        },
+        "routerModels.freeModelsUrl": {
+          "type": "string",
+          "default": "",
+          "description": "URL of a JSON file that lists the free models of each provider, e.g. https://example.com/router-models-free.json. Providers are matched by the base URL's domain, so this works for any provider you add. The ROUTER_MODELS_FREE_URL environment variable overrides this setting when set."
+        },
+        "routerModels.freeModelsAutoRefresh": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically re-download the free-models list (see \"Router Models: Free Models Url\") every few hours so newly published free models are picked up without any action."
+        },
+        "routerModels.freeModelsRefreshHours": {
+          "type": "number",
+          "default": 24,
+          "minimum": 1,
+          "maximum": 720,
+          "description": "How often (in hours) the free-models list is re-downloaded automatically. 24 means once a day."
         }
       }
     }

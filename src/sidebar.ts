@@ -141,6 +141,11 @@ export class RouterSidebar
                     await this.pushState();
                     break;
 
+                case 'refreshFreeModels':
+                    await this.provider.refreshFreeModelsFlow();
+                    await this.pushState();
+                    break;
+
                 case 'refreshProvider':
                     await this.provider.refreshProvider(
                         String(message.providerId)
@@ -274,6 +279,13 @@ export class RouterSidebar
                     );
                     break;
 
+                case 'openFreeModelsSettings':
+                    await vscode.commands.executeCommand(
+                        'workbench.action.openSettings',
+                        'routerModels.freeModelsUrl'
+                    );
+                    break;
+
                 default:
                     break;
             }
@@ -325,11 +337,13 @@ export class RouterSidebar
         <button id="btn-import" class="icon-btn" title="Import providers from JSON">&#10515;</button>
         <button id="btn-export" class="icon-btn" title="Export providers to JSON">&#10514;</button>
         <button id="btn-refresh" class="icon-btn" title="Refresh all providers">&#8635;</button>
+        <button id="btn-free" class="icon-btn" title="Detect free models">&#127873;</button>
         <button id="btn-settings" class="icon-btn" title="Include / exclude settings">&#9881;</button>
     </header>
 
     <div id="error" class="error hidden"></div>
     <main id="root"></main>
+    <div id="free-status" class="free-status hidden"></div>
 
     <script nonce="${nonce}" src="${media('sidebar.js')}"></script>
 </body>

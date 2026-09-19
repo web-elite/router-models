@@ -436,7 +436,93 @@
     // Rendering
     // ---------------------------------------------------------------
 
+    /**
+     * Human-readable "how long ago" for an ISO timestamp, e.g.
+     * "3h ago", "2d ago", "just now".
+     */
+    function timeAgo(iso) {
+        if (!iso) {
+            return '';
+        }
+
+        var parsed = Date.parse(iso);
+
+        if (!isFinite(parsed)) {
+            return '';
+        }
+
+        var seconds = Math.round((Date.now() - parsed) / 1000);
+
+        if (seconds < 60) {
+            return 'just now';
+        }
+
+        var minutes = Math.round(seconds / 60);
+
+        if (minutes < 60) {
+            return minutes + 'm ago';
+        }
+
+        var hours = Math.round(minutes / 60);
+
+        if (hours < 48) {
+            return hours + 'h ago';
+        }
+
+        return Math.round(hours / 24) + 'd ago';
+    }
+
+    /** Footer line describing the free-models registry state. */
+    function renderFreeStatus() {
+        var box = document.getElementById('free-status');
+
+        if (!box) {
+            return;
+        }
+
+        var info = snapshot.freeModels;
+
+        if (!info) {
+            box.classList.add('hidden');
+            box.innerHTML = '';
+            return;
+        }
+
+        // Nothing configured yet — keep the footer out of the way.
+        if (!info.url) {
+            box.classList.remove('hidden');
+            box.innerHTML =
+                '<span class="fs-text">Free-models detection is off.</span> ' +
+                '<button class="fs-link" data-action="open-free-settings">' +
+                'Configure</button>';
+            return;
+        }
+
+        var when = timeAgo(info.fetchedAt) || timeAgo(info.updatedAt);
+
+        var text = '&#127873; ' + info.models + ' free model' +
+            (info.models === 1 ? '' : 's') +
+            ' \u2022 ' + info.providers + ' provider' +
+            (info.providers === 1 ? '' : 's');
+
+        if (when) {
+            text += ' \u2022 updated ' + when;
+        }
+
+        if (info.autoRefresh) {
+            text += ' \u2022 auto ' + info.intervalHours + 'h';
+        }
+
+        box.classList.remove('hidden');
+        box.innerHTML =
+            '<span class="fs-text">' + text + '</span> ' +
+            '<button class="fs-link" data-action="refresh-free" ' +
+            'title="Download the latest free-models list">Update</button>';
+    }
+
     function render() {
+        renderFreeStatus();
+
         if (!snapshot.providers.length) {
             root.innerHTML =
                 '<div class="empty">' +
@@ -795,6 +881,28 @@
     document.getElementById('btn-refresh')
         .addEventListener('click', function () {
             post({ type: 'refreshAll' });
+        });
+
+    document.getElementById('btn-free')
+        .addEventListener('click', function () {
+            post({ type: 'refreshFreeModels' });
+        });
+
+    document.getElementById('free-status')
+        .addEventListener('click', function (event) {
+            var button = event.target.closest('[data-action]');
+
+            if (!button) {
+                return;
+            }
+
+            var action = button.getAttribute('data-action');
+
+            if (action === 'refresh-free') {
+                post({ type: 'refreshFreeModels' });
+            } else if (action === 'open-free-settings') {
+                post({ type: 'openFreeModelsSettings' });
+            }
         });
 
     document.getElementById('btn-settings')

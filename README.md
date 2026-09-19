@@ -128,6 +128,68 @@ To remove the label, click the button again. The **+ Model** form and the
 
 ---
 
+## 🎁 Detect free models automatically
+
+Instead of tagging models one by one, you can point Router Models at a
+**JSON file** that lists the free models of each provider. The extension
+downloads it, matches every provider you added **by the base URL's
+domain** (so `https://openrouter.ai/api/v1` in the file matches a
+provider you added as `https://openrouter.ai/v1`), and tags all the
+listed models as free automatically.
+
+**1. Publish a JSON file** anywhere on the web (a GitHub raw URL, a
+gist, your own server…) in this format:
+
+```json
+{
+  "version": 1,
+  "updated": "2025-01-30T12:00:00Z",
+  "providers": [
+    {
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "freeModels": [
+        "deepseek/deepseek-chat-v3:free",
+        "qwen/qwen-2.5-72b-instruct:free",
+        "meta-llama/*"
+      ]
+    },
+    {
+      "baseUrl": "https://api.deepseek.com",
+      "freeModels": ["deepseek-chat", "deepseek-reasoner"]
+    }
+  ]
+}
+```
+
+`freeModels` entries support `*` and `?` glob patterns, so `meta-llama/*`
+marks every model under that prefix as free. The `baseUrl`, `baseURL`,
+`url` and `host` keys are all accepted, as are `freeModels` and
+`models` — the file can also be a bare array of provider objects.
+
+**2. Tell Router Models where it is.** Either set the
+`routerModels.freeModelsUrl` setting, or export the
+`ROUTER_MODELS_FREE_URL` environment variable (the env var wins, which
+is handy for shared setups).
+
+**3. That's it.** The extension then:
+
+- adds a 🎁 button in the sidebar header to **download the latest list**
+  on demand (`Router Models: Detect Free Models` command does the same),
+- shows a footer line with the model count, provider count, how long ago
+  the list was updated, and an **Update** link,
+- **re-downloads the list automatically** every
+  `routerModels.freeModelsRefreshHours` hours (24 by default — you can
+  change it, or turn the auto-refresh off with
+  `routerModels.freeModelsAutoRefresh`),
+- refreshes on startup too when the cached copy is older than the
+  configured interval, so a machine that was off for days still catches
+  up.
+
+A model that gets dropped from the file stops being free again, and your
+own manual **+ free** tags keep working alongside it.
+
+---
+
 ## 📥 Import from a backup file (9router, omnirouter or any fork of 9router)
 
 1. Run **`Router Models: Import Providers from JSON`** — or click the ⇩

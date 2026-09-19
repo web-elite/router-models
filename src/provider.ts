@@ -28,6 +28,11 @@ import {
 } from './import';
 
 import { discoverFavicon } from './favicon';
+import {
+    CachedFreeModels,
+    fetchFreeModelsRegistry,
+    FreeModelsIndex
+} from './free-models';
 
 import {
     convertMessages,
@@ -254,6 +259,14 @@ export class RouterProvider
 
     private static readonly PROVIDERS_KEY = 'router-models.providers';
     private static readonly CACHE_KEY = 'router-models.models-cache';
+    /**
+     * globalState key holding the last downloaded free-models
+     * registry, so free tags survive a restart and work offline.
+     */
+    private static readonly FREE_MODELS_KEY =
+        'router-models.free-models';
+    /** Environment variable that overrides the URL setting. */
+    private static readonly FREE_MODELS_ENV = 'ROUTER_MODELS_FREE_URL';
     private static readonly SECRET_PREFIX = 'router-models.apiKey.';
     /**
      * SecretStorage key holding the JSON array of API keys
@@ -276,6 +289,13 @@ export class RouterProvider
     private errors: Map<string, string> = new Map();
     private resolved: Map<string, ResolvedModel> = new Map();
     private refreshing: Set<string> = new Set();
+
+    /** Free models declared by the remote registry, by domain. */
+    private freeIndex: FreeModelsIndex = FreeModelsIndex.empty();
+    /** Handle of the automatic free-models refresh timer. */
+    private freeModelsTimer: ReturnType<typeof setInterval> | undefined;
+    /** Prevents overlapping automatic free-models downloads. */
+    private refreshingFreeModels = false;
 
     /** Mirrors the current `syncApiKeys` setting (key set applied). */
     private syncKeysApplied = false;
@@ -309,6 +329,21 @@ export class RouterProvider
             ) {
                 this.onDidChangeEmitter.fire();
             }
+
+            if (
+                event.affectsConfiguration(
+                    'routerModels.freeModelsUrl'
+                ) ||
+                event.affectsConfiguration(
+                    'routerModels.freeModelsRefreshHours'
+                ) ||
+                event.affectsConfiguration(
+                    'routerModels.freeModelsAutoRefresh'
+                )
+            ) {
+                this.scheduleFreeModelsRefresh();
+                this.onDidChangeStateEmitter.fire();
+            }
         });
 
     /** Reacts to `routerModels.syncApiKeys` being toggled. */
@@ -339,8 +374,14 @@ export class RouterProvider
             this.configWatcher,
             this.syncWatcher,
             this.onDidChangeEmitter,
-            this.onDidChangeStateEmitter
+            this.onDidChangeStateEmitter,
+            // Stop the automatic free-models download loop on
+            // deactivation.
+            new vscode.Disposable(() => this.clearFreeModelsTimer())
         );
+
+        this.scheduleFreeModelsRefresh();
+        this.maybeRefreshStaleFreeModels();
     }
 
     private get secrets(): vscode.SecretStorage {
@@ -365,6 +406,25 @@ export class RouterProvider
         >(RouterProvider.CACHE_KEY, {});
 
         this.cache = new Map(Object.entries(saved));
+
+        // The last downloaded free-models registry is reused until a
+        // refresh replaces it, so free tags survive a restart.
+        const cached = this.context.globalState.get<CachedFreeModels>(
+            RouterProvider.FREE_MODELS_KEY
+        );
+
+        if (cached) {
+            try {
+                this.freeIndex = FreeModelsIndex.fromJson(
+                    cached.json,
+                    cached.source
+                );
+                this.freeIndex.fetchedAt = cached.fetchedAt;
+            } catch {
+                // A corrupt cache entry is ignored; the next
+                // download repopulates it.
+            }
+        }
     }
 
     private async saveProviders(): Promise<void> {
@@ -379,6 +439,225 @@ export class RouterProvider
             RouterProvider.CACHE_KEY,
             Object.fromEntries(this.cache)
         );
+    }
+
+    // ---------------------------------------------------------------
+    // Free-models registry
+    // ---------------------------------------------------------------
+
+    /**
+     * The URL of the free-models file. The
+     * `ROUTER_MODELS_FREE_URL` environment variable wins over the
+     * `routerModels.freeModelsUrl` setting when it is set.
+     */
+    freeModelsUrl(): string | undefined {
+        const env = process.env[RouterProvider.FREE_MODELS_ENV];
+
+        if (env && env.trim()) {
+            return env.trim();
+        }
+
+        const configured = vscode.workspace
+            .getConfiguration('routerModels')
+            .get<string>('freeModelsUrl', '')
+            .trim();
+
+        return configured || undefined;
+    }
+
+    private async saveFreeIndex(): Promise<void> {
+        if (this.freeIndex.isEmpty()) {
+            await this.context.globalState.update(
+                RouterProvider.FREE_MODELS_KEY,
+                undefined
+            );
+            return;
+        }
+
+        await this.context.globalState.update(
+            RouterProvider.FREE_MODELS_KEY,
+            this.freeIndex.toCache()
+        );
+    }
+
+    /**
+     * Downloads the free-models file, indexes it and persists the
+     * result. Free tags are derived from the registry on the fly, so
+     * a model that is dropped from the file stops being free again.
+     */
+    async refreshFreeModels(): Promise<FreeModelsIndex> {
+        const url = this.freeModelsUrl();
+
+        if (!url) {
+            throw new Error(
+                'No free-models URL configured. Set ' +
+                    '"routerModels.freeModelsUrl" or the ' +
+                    `${RouterProvider.FREE_MODELS_ENV} environment ` +
+                    'variable first.'
+            );
+        }
+
+        const timeoutMs = vscode.workspace
+            .getConfiguration('routerModels')
+            .get<number>('requestTimeoutMs', 30000);
+
+        const index = await fetchFreeModelsRegistry(url, timeoutMs);
+
+        this.freeIndex = index;
+        await this.saveFreeIndex();
+        this.fireChanged();
+
+        return index;
+    }
+
+    /** Manual refresh with progress UI and a result message. */
+    async refreshFreeModelsFlow(): Promise<void> {
+        if (!this.freeModelsUrl()) {
+            const choice = await vscode.window.showWarningMessage(
+                'Router Models: no free-models URL is configured.',
+                'Open Settings'
+            );
+
+            if (choice === 'Open Settings') {
+                await vscode.commands.executeCommand(
+                    'workbench.action.openSettings',
+                    'routerModels.freeModelsUrl'
+                );
+            }
+
+            return;
+        }
+
+        await vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title: 'Router Models: detecting free models…'
+            },
+            async () => {
+                try {
+                    const index = await this.refreshFreeModels();
+
+                    vscode.window.showInformationMessage(
+                        'Router Models: free-models list updated — ' +
+                            `${index.modelCount} free model(s) across ` +
+                            `${index.providerCount} provider(s).`
+                    );
+                } catch (error) {
+                    vscode.window.showErrorMessage(
+                        'Router Models: could not download the ' +
+                            `free-models list. ${toErrorMessage(error)}`
+                    );
+                }
+            }
+        );
+    }
+
+    /** Downloads quietly in the background; failures never block. */
+    private async backgroundRefreshFreeModels(): Promise<void> {
+        if (this.refreshingFreeModels) {
+            return;
+        }
+
+        this.refreshingFreeModels = true;
+
+        try {
+            await this.refreshFreeModels();
+        } catch {
+            // Background failures are non-fatal; the cached index
+            // keeps working and the next interval retries.
+        } finally {
+            this.refreshingFreeModels = false;
+        }
+    }
+
+    private clearFreeModelsTimer(): void {
+        if (this.freeModelsTimer) {
+            clearInterval(this.freeModelsTimer);
+            this.freeModelsTimer = undefined;
+        }
+    }
+
+    /**
+     * (Re)starts the automatic free-models download on the configured
+     * interval. Called on activation and whenever the related
+     * settings change.
+     */
+    private scheduleFreeModelsRefresh(): void {
+        this.clearFreeModelsTimer();
+
+        const config = vscode.workspace.getConfiguration('routerModels');
+
+        if (!config.get<boolean>('freeModelsAutoRefresh', true)) {
+            return;
+        }
+
+        const hours = config.get<number>('freeModelsRefreshHours', 24);
+        const intervalMs =
+            Math.max(1, Math.round(hours)) * 60 * 60 * 1000;
+
+        this.freeModelsTimer = setInterval(
+            () => void this.backgroundRefreshFreeModels(),
+            intervalMs
+        );
+    }
+
+    /**
+     * Refreshes the registry shortly after activation when the cached
+     * copy is older than the configured interval (or missing), so a
+     * machine that was asleep / off for days still catches up.
+     */
+    private maybeRefreshStaleFreeModels(): void {
+        if (!this.freeModelsUrl()) {
+            return;
+        }
+
+        const hours = vscode.workspace
+            .getConfiguration('routerModels')
+            .get<number>('freeModelsRefreshHours', 24);
+
+        const limitMs = Math.max(1, Math.round(hours)) * 60 * 60 * 1000;
+        const fetched = this.freeIndex.fetchedAt
+            ? Date.parse(this.freeIndex.fetchedAt)
+            : NaN;
+
+        const stale =
+            !Number.isFinite(fetched) || Date.now() - fetched > limitMs;
+
+        if (stale) {
+            setTimeout(
+                () => void this.backgroundRefreshFreeModels(),
+                5000
+            );
+        }
+    }
+
+    /** Status shown in the sidebar footer. */
+    freeModelsStatus(): {
+        url: string | undefined;
+        autoRefresh: boolean;
+        intervalHours: number;
+        updatedAt: string | undefined;
+        fetchedAt: string | undefined;
+        providers: number;
+        models: number;
+    } {
+        const config = vscode.workspace.getConfiguration('routerModels');
+
+        return {
+            url: this.freeModelsUrl(),
+            autoRefresh: config.get<boolean>(
+                'freeModelsAutoRefresh',
+                true
+            ),
+            intervalHours: config.get<number>(
+                'freeModelsRefreshHours',
+                24
+            ),
+            updatedAt: this.freeIndex.updatedAt,
+            fetchedAt: this.freeIndex.fetchedAt,
+            providers: this.freeIndex.providerCount,
+            models: this.freeIndex.modelCount
+        };
     }
 
     // ---------------------------------------------------------------
@@ -1614,20 +1893,28 @@ export class RouterProvider
     // ---------------------------------------------------------------
 
     /**
-     * A model counts as free when the user tagged it or its id /
+     * A model counts as free when the user tagged it, when its id /
      * display name already contains "free" (e.g. OpenRouter's `:free`
-     * variants) — free models get a "(free)" label in the model picker
-     * so they are easy to find.
+     * variants), or when the remote free-models registry lists it for
+     * this provider's domain — free models get a "(free)" label in
+     * the model picker so they are easy to find.
      */
-    private isFreeModel(model: ModelEntry): boolean {
+    private isFreeModel(
+        provider: ProviderConfig,
+        model: ModelEntry
+    ): boolean {
         if (model.free) {
             return true;
         }
 
-        return (
+        if (
             /\bfree\b/i.test(model.id) ||
             /\bfree\b/i.test(model.name ?? '')
-        );
+        ) {
+            return true;
+        }
+
+        return this.freeIndex.isFreeModel(provider.baseUrl, model.id);
     }
 
     isVisible(modelId: string): boolean {
@@ -1699,7 +1986,10 @@ export class RouterProvider
     // Snapshot for the sidebar
     // ---------------------------------------------------------------
 
-    async getSnapshot(): Promise<{ providers: ProviderSnapshot[] }> {
+    async getSnapshot(): Promise<{
+        providers: ProviderSnapshot[];
+        freeModels: ReturnType<RouterProvider['freeModelsStatus']>;
+    }> {
         const providers: ProviderSnapshot[] = [];
 
         for (const provider of this.providers) {
@@ -1734,7 +2024,7 @@ export class RouterProvider
                 id: model.id,
                 name: model.name,
                 manual: Boolean(model.manual),
-                free: this.isFreeModel(model),
+                free: this.isFreeModel(provider, model),
                 hidden: !this.isVisible(model.id),
                 maxInputTokens: this.maxInputTokens(model),
                 maxOutputTokens: this.maxOutputTokens(model)
@@ -1759,7 +2049,7 @@ export class RouterProvider
             });
         }
 
-        return { providers };
+        return { providers, freeModels: this.freeModelsStatus() };
     }
 
     // ---------------------------------------------------------------
@@ -3216,7 +3506,7 @@ export class RouterProvider
             }
 
             const baseName = value.model.name || value.model.id;
-            const free = this.isFreeModel(value.model);
+            const free = this.isFreeModel(value.provider, value.model);
 
             infos.push({
                 id: key,

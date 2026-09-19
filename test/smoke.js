@@ -28,6 +28,11 @@ const {
     MAX_SEARCH_DEPTH
 } = require('../out/import.js');
 
+const {
+    rootDomainOf,
+    FreeModelsIndex
+} = require('../out/free-models.js');
+
 let passed = 0;
 const test = (name, fn) => {
     fn();
@@ -754,6 +759,107 @@ test('decodeTextFile: BOM handling (utf8 / utf16le / utf16be / plain)', () => {
         decodeTextFile(Buffer.concat([Buffer.from([0xfe, 0xff]), be])),
         '{"a":1}'
     );
+});
+
+// ---------------------------------------------------------------
+// Free-models registry (rootDomainOf + FreeModelsIndex)
+// ---------------------------------------------------------------
+
+test('rootDomainOf: scheme / subdomain / path / port are ignored', () => {
+    assert.strictEqual(rootDomainOf('https://api.openrouter.ai/api/v1'), 'openrouter.ai');
+    assert.strictEqual(rootDomainOf('https://openrouter.ai'), 'openrouter.ai');
+    assert.strictEqual(rootDomainOf('http://OPENROUTER.AI/v1'), 'openrouter.ai');
+    assert.strictEqual(rootDomainOf('https://api.deepseek.com'), 'deepseek.com');
+    assert.strictEqual(rootDomainOf('https://generativelanguage.googleapis.com/v1beta'), 'googleapis.com');
+    assert.strictEqual(rootDomainOf('https://user:pass@api.mistral.ai/v1'), 'mistral.ai');
+    assert.strictEqual(rootDomainOf('https://api.together.xyz:8443/openai/v1'), 'together.xyz');
+});
+
+test('rootDomainOf: single-label hosts, IPs and junk', () => {
+    assert.strictEqual(rootDomainOf('http://localhost:1234/v1'), 'localhost');
+    assert.strictEqual(rootDomainOf('https://127.0.0.1:8080'), '127.0.0.1');
+    assert.strictEqual(rootDomainOf('http://[::1]:8080/v1'), '[::1]');
+    assert.strictEqual(rootDomainOf(''), '');
+    assert.strictEqual(rootDomainOf(undefined), '');
+    assert.strictEqual(rootDomainOf('not a url'), 'not a url');
+});
+
+test('rootDomainOf: multi-part country / platform suffixes', () => {
+    assert.strictEqual(rootDomainOf('https://api.example.co.uk/v1'), 'example.co.uk');
+    assert.strictEqual(rootDomainOf('https://foo.github.io/api'), 'foo.github.io');
+    assert.strictEqual(rootDomainOf('https://app.vercel.app/api/v1'), 'app.vercel.app');
+});
+
+test('FreeModelsIndex: matches a provider by base URL domain', () => {
+    const index = FreeModelsIndex.fromJson({
+        version: 1,
+        providers: [
+            { baseUrl: 'https://api.openrouter.ai/api/v1', freeModels: ['deepseek/deepseek-chat-v3:free'] },
+            { baseUrl: 'https://api.deepseek.com', freeModels: ['deepseek-chat'] }
+        ]
+    }, 'https://example.com/free.json');
+
+    assert.strictEqual(index.providerCount, 2);
+    assert.strictEqual(index.modelCount, 2);
+    assert.strictEqual(index.source, 'https://example.com/free.json');
+
+    // Different subdomain / path of the same domain still matches.
+    assert.strictEqual(index.isFreeModel('https://openrouter.ai', 'deepseek/deepseek-chat-v3:free'), true);
+    assert.strictEqual(index.isFreeModel('https://api.deepseek.com/v1', 'deepseek-chat'), true);
+
+    // A model the registry does not list is not free.
+    assert.strictEqual(index.isFreeModel('https://api.deepseek.com', 'deepseek-reasoner'), false);
+
+    // A provider the registry does not know is never free.
+    assert.strictEqual(index.isFreeModel('https://api.groq.com', 'deepseek-chat'), false);
+});
+
+test('FreeModelsIndex: glob patterns and alias keys', () => {
+    const index = FreeModelsIndex.fromJson({
+        providers: [
+            { url: 'https://api.openrouter.ai', models: ['meta-llama/*', '*:free'] }
+        ]
+    });
+
+    assert.strictEqual(index.isFreeModel('https://openrouter.ai', 'meta-llama/llama-4-scout'), true);
+    assert.strictEqual(index.isFreeModel('https://openrouter.ai', 'qwen/qwen-2.5:free'), true);
+    assert.strictEqual(index.isFreeModel('https://openrouter.ai', 'paid/model'), false);
+});
+
+test('FreeModelsIndex: rejects malformed files and skips junk', () => {
+    assert.throws(() => FreeModelsIndex.fromJson(null), /JSON object/);
+    assert.throws(() => FreeModelsIndex.fromJson({ providers: 5 }), /providers/);
+
+    const index = FreeModelsIndex.fromJson({
+        providers: [
+            { baseUrl: 'https://api.x.com', freeModels: ['a', '', 42, null, 'a'] },
+            { baseUrl: '', freeModels: ['b'] },
+            'junk',
+            null
+        ]
+    });
+
+    assert.strictEqual(index.providerCount, 1);
+    assert.strictEqual(index.modelCount, 1);
+    assert.strictEqual(index.isEmpty(), false);
+});
+
+test('FreeModelsIndex: empty() and toCache() round-trip', () => {
+    assert.strictEqual(FreeModelsIndex.empty().isEmpty(), true);
+    assert.strictEqual(FreeModelsIndex.empty().isFreeModel('https://x.com', 'm'), false);
+
+    const index = FreeModelsIndex.fromJson({
+        providers: [{ baseUrl: 'https://api.x.com', freeModels: ['m1'] }]
+    });
+
+    const cache = index.toCache();
+
+    assert.ok(cache.fetchedAt);
+    assert.deepStrictEqual(cache.json.providers, [{ baseUrl: 'x.com', freeModels: ['m1'] }]);
+
+    const restored = FreeModelsIndex.fromJson(cache.json, cache.source);
+
+    assert.strictEqual(restored.isFreeModel('https://api.x.com/v1', 'm1'), true);
 });
 
 // ---------------------------------------------------------------

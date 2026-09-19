@@ -3222,7 +3222,7 @@ export class RouterProvider
                 id: key,
                 name: free && !/\bfree\b/i.test(baseName)
                     ? `${baseName} (free) - ${value.provider.name}`
-                    : baseName,
+                    : `${baseName} - ${value.provider.name}`,
                 family: value.provider.name,
                 version: '1.0',
                 maxInputTokens: this.maxInputTokens(value.model),

@@ -147,10 +147,22 @@
         },
         "routerModels.maxRetries": {
           "type": "number",
-          "default": 3,
+          "default": 5,
           "minimum": 0,
-          "maximum": 10,
-          "description": "How many times a chat request is retried with the next available key on 429 / server errors, or when the model returns an empty response."
+          "maximum": 20,
+          "description": "How many times a chat request is retried automatically (without any user action) on rate limits, server errors, empty responses and dropped connections. Attempts are spaced out with an exponential backoff."
+        },
+        "routerModels.retryBackoffMs": {
+          "type": "number",
+          "default": 1000,
+          "minimum": 0,
+          "maximum": 60000,
+          "description": "Base delay in milliseconds before each retry, doubled every attempt and capped at 30 s. Gives a transient network or provider outage time to clear, so unattended (e.g. overnight) runs keep going instead of stopping on the first blip."
+        },
+        "routerModels.retryMidStreamErrors": {
+          "type": "boolean",
+          "default": true,
+          "description": "Also retry a connection that dropped after the model had already started answering. The retried answer is appended, so the response may contain a duplicated section — preferable to a hard stop for long unattended runs. A failure after a tool call was delivered is never retried (the agent would run the tool twice)."
         },
         "routerModels.autoFavicon": {
           "type": "boolean",

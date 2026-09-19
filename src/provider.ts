@@ -195,13 +195,45 @@ function toErrorMessage(error: unknown): string {
 /** A stream failure after response parts were already delivered. */
 class MidStreamFailureError extends Error {
     readonly cause: unknown;
+    /** True when a tool call was already reported to the chat. */
+    readonly deliveredToolCall: boolean;
 
-    constructor(cause: unknown) {
+    constructor(cause: unknown, deliveredToolCall: boolean) {
         super('Stream failed after output was already delivered.');
 
         this.name = 'MidStreamFailureError';
         this.cause = cause;
+        this.deliveredToolCall = deliveredToolCall;
     }
+}
+
+/**
+ * Connection-level failures (dropped socket, aborted fetch, DNS or
+ * timeout). These are worth retrying, unlike a clean HTTP error the
+ * server actually formulated. Undici reports a remotely closed socket
+ * — the usual "Sorry, your request failed" cause — as
+ * `TypeError: terminated`.
+ */
+function isNetworkError(error: unknown): boolean {
+    if (!(error instanceof Error)) {
+        return false;
+    }
+
+    // A formulated HTTP response is not a network drop.
+    if (error instanceof ProviderHttpError) {
+        return false;
+    }
+
+    const name = error.name ?? '';
+    const message = error.message ?? '';
+
+    if (name === 'AbortError' || name === 'TimeoutError') {
+        return true;
+    }
+
+    return /terminated|fetch failed|network|socket|ECONNRESET|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|EPIPE|aborted|timeout/i.test(
+        message
+    );
 }
 
 /** Parses streamed tool-call arguments into a JSON object. */
@@ -3236,7 +3268,21 @@ export class RouterProvider
 
         const maxRetries = Math.max(
             0,
-            Math.min(10, config.get<number>('maxRetries', 3))
+            Math.min(20, config.get<number>('maxRetries', 5))
+        );
+
+        const retryBackoffMs = Math.max(
+            0,
+            Math.min(60000, config.get<number>('retryBackoffMs', 1000))
+        );
+
+        // A connection that drops after the model already started
+        // answering is retried too (the retried text is appended),
+        // because for long unattended runs a hard stop is worse than
+        // a repeated line.
+        const retryMidStream = config.get<boolean>(
+            'retryMidStreamErrors',
+            true
         );
 
         const showReasoning = config.get<boolean>(
@@ -3256,6 +3302,13 @@ export class RouterProvider
         let attempt = 0;
 
         while (attempt < maxAttempts) {
+            // Space retries out with a growing delay so a transient
+            // outage (the usual cause of "terminated") has time to
+            // clear instead of burning every retry within a second.
+            if (attempt > 0) {
+                await this.backoff(attempt, retryBackoffMs, token);
+            }
+
             const keys = await this.getKeys(selected.provider);
 
             // Throws a descriptive error when no key is configured.
@@ -3299,38 +3352,58 @@ export class RouterProvider
                     throw new vscode.CancellationError();
                 }
 
-                // A failure after output was already streamed cannot be
-                // retried (it would duplicate the delivered content).
+                // A failure after output was already streamed would
+                // duplicate the delivered content if retried. Only a
+                // dropped connection is retried (opt-in), and never
+                // once a tool call was delivered (the agent would run
+                // it twice); everything else is final.
                 if (error instanceof MidStreamFailureError) {
-                    throw error.cause instanceof Error
-                        ? error.cause
-                        : error;
+                    const cause = error.cause;
+
+                    if (
+                        !retryMidStream ||
+                        error.deliveredToolCall ||
+                        !isNetworkError(cause) ||
+                        attempt >= maxAttempts
+                    ) {
+                        throw this.wrapFinalError(
+                            cause,
+                            selected,
+                            attempt
+                        );
+                    }
+
+                    lastError = cause;
+                } else {
+                    // Key-independent failures (bad request, unknown
+                    // model, invalid auth of the request itself) fail
+                    // fast instead of burning through the other keys.
+                    const status =
+                        error instanceof ProviderHttpError
+                            ? error.status
+                            : undefined;
+
+                    if (
+                        status !== undefined &&
+                        status !== 429 &&
+                        status !== 402 &&
+                        status !== 408 &&
+                        !isAuthFailure(status) &&
+                        !isServerFallback(status)
+                    ) {
+                        throw this.wrapFinalError(
+                            error,
+                            selected,
+                            attempt
+                        );
+                    }
+
+                    lastError = error;
                 }
-
-                // Key-independent failures (bad request, unknown model,
-                // invalid auth of the request itself) fail fast instead
-                // of burning through the other keys.
-                const status =
-                    error instanceof ProviderHttpError
-                        ? error.status
-                        : undefined;
-
-                if (
-                    status !== undefined &&
-                    status !== 429 &&
-                    status !== 402 &&
-                    status !== 408 &&
-                    !isAuthFailure(status) &&
-                    !isServerFallback(status)
-                ) {
-                    throw this.wrapFinalError(error, selected);
-                }
-
-                lastError = error;
             }
         }
 
-        throw this.wrapFinalError(lastError, selected);
+        throw this.wrapFinalError(lastError, selected, attempt);
     }
 
     /**
@@ -3340,23 +3413,66 @@ export class RouterProvider
      */
     private wrapFinalError(
         error: unknown,
-        selected: ResolvedModel
+        selected: ResolvedModel,
+        attempts = 0
     ): Error {
         const providerName = selected.provider.name;
         const modelId = selected.model.id;
         const prefix = `[${providerName}] ${modelId}: `;
 
+        const retried =
+            attempts > 1 ? ` (retried ${attempts - 1} times)` : '';
+
+        let body: string;
+
         if (error instanceof ProviderHttpError) {
-            return new Error(prefix + error.message);
+            body = error.message + retried;
+        } else if (isNetworkError(error)) {
+            body =
+                'The connection to the provider was dropped before the ' +
+                'response finished' +
+                retried +
+                '. This is usually a transient network or provider ' +
+                'outage; the request was retried automatically and ' +
+                'still failed, so it needs a manual retry.';
+        } else if (error instanceof Error) {
+            body = error.message + retried;
+        } else {
+            body = 'The chat request failed: ' + String(error);
         }
 
-        if (error instanceof Error) {
-            return new Error(prefix + error.message);
+        return new Error(prefix + body);
+    }
+
+    /**
+     * Waits an exponentially growing delay before the next retry:
+     * `base * 2^(attempt-1)`, capped at 30 s. Returns immediately when
+     * the request is cancelled, so a user cancel never hangs.
+     */
+    private async backoff(
+        attempt: number,
+        baseMs: number,
+        token: vscode.CancellationToken
+    ): Promise<void> {
+        if (baseMs <= 0 || token.isCancellationRequested) {
+            return;
         }
 
-        return new Error(
-            prefix + 'The chat request failed: ' + String(error)
-        );
+        const delayMs = Math.min(baseMs * 2 ** (attempt - 1), 30000);
+
+        await new Promise<void>(resolve => {
+            let disposable: vscode.Disposable | undefined;
+
+            const done = () => {
+                clearTimeout(timer);
+                disposable?.dispose();
+                resolve();
+            };
+
+            const timer = setTimeout(done, delayMs);
+
+            disposable = token.onCancellationRequested(done);
+        });
     }
 
     /**
@@ -3371,7 +3487,7 @@ export class RouterProvider
         progress: vscode.Progress<vscode.LanguageModelResponsePart>,
         token: vscode.CancellationToken,
         showReasoning: boolean
-    ): Promise<{ producedOutput: boolean }> {
+    ): Promise<{ producedOutput: boolean; producedToolCalls: boolean }> {
         const controller = new AbortController();
 
         token.onCancellationRequested(() => controller.abort());
@@ -3433,6 +3549,7 @@ export class RouterProvider
 
         const tools = new ToolCallAccumulator();
         let producedOutput = false;
+        let producedToolCalls = false;
 
         const report = (part: vscode.LanguageModelResponsePart) => {
             producedOutput = true;
@@ -3440,6 +3557,7 @@ export class RouterProvider
         };
 
         const reportCompletedCall = (call: CompletedToolCall) => {
+            producedToolCalls = true;
             report(
                 new vscode.LanguageModelToolCallPart(
                     call.id,
@@ -3529,7 +3647,10 @@ export class RouterProvider
             }
 
             if (producedOutput) {
-                throw new MidStreamFailureError(error);
+                throw new MidStreamFailureError(
+                    error,
+                    producedToolCalls
+                );
             }
 
             throw error;
@@ -3541,7 +3662,7 @@ export class RouterProvider
             reportCompletedCall(call);
         }
 
-        return { producedOutput };
+        return { producedOutput, producedToolCalls };
     }
 
     async provideTokenCount(

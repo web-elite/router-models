@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "updated": "2025-01-30T12:00:00Z",
+  "providers": [
+    {
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "freeModels": ["deepseek/deepseek-chat-v3:free", "meta-llama/*"]
+    },
+    {
+      "baseUrl": "https://api.deepseek.com",
+      "freeModels": ["deepseek-chat", "deepseek-reasoner"]
+    }
+  ]
+}

@@ -579,8 +579,11 @@
     function renderProvider(provider) {
         var expanded = expandedId === provider.id;
         var disabled = provider.disabled;
+        var pinned = Boolean(provider.pinned);
 
-        var html = '<div class="card' + (disabled ? ' disabled' : '') + '">';
+        var html = '<div class="card' +
+            (disabled ? ' disabled' : '') +
+            (pinned ? ' pinned' : '') + '">';
 
         html += '<div class="card-head" data-action="toggle" ' +
             'data-pid="' + esc(provider.id) + '">';
@@ -592,9 +595,20 @@
 
         html += '<span class="name">' + esc(provider.name) + '</span>';
 
+        if (pinned) {
+            html += '<span class="tag pinned-tag">pinned</span>';
+        }
+
         if (disabled) {
             html += '<span class="tag disabled-tag">off</span>';
         }
+
+        // Pin / unpin button
+        html += '<button class="pin-btn' + (pinned ? ' on' : '') +
+            '" data-action="pin" data-pid="' + esc(provider.id) + '" ' +
+            'title="' + (pinned ? 'Unpin provider' : 'Pin to top') +
+            '" tabindex="0" aria-pressed="' + (pinned ? 'true' : 'false') +
+            '">' + (pinned ? '📌' : '📍') + '</button>';
 
         // Enable / disable toggle switch
         html += '<label class="switch" data-action="toggle-disabled" ' +
@@ -850,6 +864,16 @@
         if (action === 'toggle') {
             expandedId = expandedId === pid ? null : pid;
             render();
+            return;
+        }
+
+        if (action === 'pin') {
+            event.preventDefault();
+            event.stopPropagation();
+            post({
+                type: 'togglePinned',
+                providerId: pid
+            });
             return;
         }
 

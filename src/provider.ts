@@ -61,6 +61,8 @@ export type ProviderConfig = {
     cooldownSeconds?: number;
     /** When true the provider is hidden from the model picker. */
     disabled?: boolean;
+    /** When true the provider stays at the top of the sidebar list. */
+    pinned?: boolean;
 };
 
 export type ModelEntry = {
@@ -95,6 +97,8 @@ export type ProviderSnapshot = {
     hasKey: boolean;
     error?: string;
     disabled: boolean;
+    /** True when the user pinned the provider to the top. */
+    pinned: boolean;
     models: ModelSnapshot[];
     /** Multi-key statistics for this provider. */
     keys: KeyStats;
@@ -382,6 +386,7 @@ export class RouterProvider
         this.syncKeysApplied = this.syncApiKeysEnabled();
         this.applySyncKeys();
         void this.migrateLegacyData();
+        void this.restoreMissingIcons();
 
         // Cooldown / key-state changes refresh the sidebar and the
         // status bar key monitor.
@@ -732,12 +737,16 @@ export class RouterProvider
      * Declares which globalState keys participate in VS Code Settings
      * Sync. `setKeysForSync` replaces the whole set, so it is rebuilt
      * from the current setting on every call. The API-key mirror only
-     * joins the set when the user opted in.
+     * joins the set when the user opted in; everything else (provider
+     * list, model cache, UI choices) always syncs so two machines look
+     * identical.
      */
     private applySyncKeys(): void {
         const keys = [
             RouterProvider.PROVIDERS_KEY,
-            RouterProvider.CACHE_KEY
+            RouterProvider.CACHE_KEY,
+            RouterProvider.OFFERS_BANNER_KEY,
+            RouterProvider.FREE_MODELS_KEY
         ];
 
         if (this.syncKeysApplied) {
@@ -833,16 +842,21 @@ export class RouterProvider
     async reloadFromSync(): Promise<boolean> {
         const before = JSON.stringify({
             providers: this.providers,
-            cache: Object.fromEntries(this.cache)
+            cache: Object.fromEntries(this.cache),
+            freeModels: this.freeIndexSnapshot(),
+            offersBannerHidden: this.offersBannerHidden
         });
 
         this.load();
         this.syncKeysApplied = this.syncApiKeysEnabled();
         this.applySyncKeys();
+        void this.restoreMissingIcons();
 
         const after = JSON.stringify({
             providers: this.providers,
-            cache: Object.fromEntries(this.cache)
+            cache: Object.fromEntries(this.cache),
+            freeModels: this.freeIndexSnapshot(),
+            offersBannerHidden: this.offersBannerHidden
         });
 
         if (before !== after) {
@@ -851,6 +865,21 @@ export class RouterProvider
         }
 
         return false;
+    }
+
+    /**
+     * Stable view of the free-models index for change detection.
+     * `FreeModelsIndex.toCache()` stamps `fetchedAt` with the current
+     * time when it is unknown, which would make every comparison
+     * differ; this drops that field and only looks at the content.
+     */
+    private freeIndexSnapshot(): string {
+        const cached = this.freeIndex.toCache();
+
+        return JSON.stringify({
+            source: cached.source,
+            json: cached.json
+        });
     }
 
     /** Command flow around `reloadFromSync` with user feedback. */
@@ -973,6 +1002,30 @@ export class RouterProvider
 
         await this.saveCache();
         this.fireChanged();
+    }
+
+    /**
+     * Re-downloads icons for providers whose image file is missing.
+     * Icon bytes live in `globalStorage`, which Settings Sync does not
+     * cover, so a provider arriving from another machine keeps its
+     * `iconUrl` but loses the cached file. Called after `load()`.
+     */
+    private async restoreMissingIcons(): Promise<void> {
+        for (const provider of this.providers) {
+            if (!provider.iconUrl || !provider.iconFile) {
+                continue;
+            }
+
+            try {
+                await fs.access(
+                    path.join(this.iconsDir.fsPath, provider.iconFile)
+                );
+            } catch {
+                void this.updateIcon(provider).catch(() => {
+                    // Best-effort: the sidebar falls back to no icon.
+                });
+            }
+        }
     }
 
     // ---------------------------------------------------------------
@@ -1323,6 +1376,19 @@ export class RouterProvider
         const provider = this.getProvider(id);
 
         provider.disabled = !provider.disabled;
+        await this.saveProviders();
+        this.fireChanged();
+    }
+
+    /**
+     * Pins a provider to the top of the sidebar list (or unpins it).
+     * The choice is stored on the provider itself, so it travels with
+     * the provider list through Settings Sync.
+     */
+    async togglePinned(id: string): Promise<void> {
+        const provider = this.getProvider(id);
+
+        provider.pinned = !provider.pinned;
         await this.saveProviders();
         this.fireChanged();
     }
@@ -2051,7 +2117,14 @@ export class RouterProvider
     }> {
         const providers: ProviderSnapshot[] = [];
 
-        for (const provider of this.providers) {
+        // Sidebar order: enabled providers first (pinned ones on top),
+        // disabled providers last. The stored array order is the
+        // tie-breaker, so this never shuffles unrelated providers.
+        const ordered = RouterProvider.sortProvidersForSidebar(
+            this.providers
+        );
+
+        for (const provider of ordered) {
             const namedKeys = await this.resolveNamedKeys(provider);
             const keyDetails: NamedKeyDetail[] = this.keys
                 .snapshot(provider.id, namedKeyValues(namedKeys))
@@ -2101,6 +2174,7 @@ export class RouterProvider
                 hasKey: namedKeys.length > 0,
                 error: this.errors.get(provider.id),
                 disabled: Boolean(provider.disabled),
+                pinned: Boolean(provider.pinned),
                 models,
                 keys: aggregateKeyStats(keyDetails),
                 keyList: keyDetails,
@@ -2687,6 +2761,37 @@ export class RouterProvider
                     ? 'including the API keys — keep the file private!'
                     : 'without API keys.')
         );
+    }
+
+    /**
+     * Sidebar display order: enabled providers first (pinned ones on
+     * top), disabled providers last. The stored array order is the
+     * tie-breaker, so unrelated providers never shuffle. Pure and
+     * vscode-free so the ordering can be unit tested in isolation.
+     */
+    static sortProvidersForSidebar(
+        providers: ProviderConfig[]
+    ): ProviderConfig[] {
+        return providers
+            .map((provider, index) => ({ provider, index }))
+            .sort((a, b) => {
+                const aOff = a.provider.disabled ? 1 : 0;
+                const bOff = b.provider.disabled ? 1 : 0;
+
+                if (aOff !== bOff) {
+                    return aOff - bOff;
+                }
+
+                const aPin = a.provider.pinned ? 0 : 1;
+                const bPin = b.provider.pinned ? 0 : 1;
+
+                if (aPin !== bPin) {
+                    return aPin - bPin;
+                }
+
+                return a.index - b.index;
+            })
+            .map(item => item.provider);
     }
 
     /** Collects everything worth exporting into the export format. */

@@ -33,6 +33,42 @@ const {
     FreeModelsIndex
 } = require('../out/free-models.js');
 
+// `provider.js` imports the `vscode` module, which does not exist
+// outside an extension host. A minimal stub is enough to load it and
+// reach the pure `sortProvidersForSidebar` helper.
+const Module = require('module');
+const originalLoad = Module._load;
+
+Module._load = function (request, parent, isMain) {
+    if (request === 'vscode') {
+        return {
+            workspace: {
+                getConfiguration: () => ({ get: () => undefined })
+            },
+            EventEmitter: class {
+                on() { return this; }
+                fire() {}
+                dispose() {}
+            },
+            Disposable: class {},
+            Uri: { file: p => ({ fsPath: p }) },
+            lm: { registerLanguageModelChatProvider: () => ({ dispose() {} }) },
+            window: {
+                registerWebviewViewProvider: () => ({ dispose() {} }),
+                showInputBox: async () => undefined,
+                showQuickPick: async () => undefined
+            },
+            commands: { registerCommand: () => ({ dispose() {} }) }
+        };
+    }
+
+    return originalLoad.apply(this, arguments);
+};
+
+const { RouterProvider } = require('../out/provider.js');
+
+Module._load = originalLoad;
+
 let passed = 0;
 const test = (name, fn) => {
     fn();
@@ -860,6 +896,45 @@ test('FreeModelsIndex: empty() and toCache() round-trip', () => {
     const restored = FreeModelsIndex.fromJson(cache.json, cache.source);
 
     assert.strictEqual(restored.isFreeModel('https://api.x.com/v1', 'm1'), true);
+});
+
+// ---------------------------------------------------------------
+// RouterProvider.sortProvidersForSidebar
+// ---------------------------------------------------------------
+
+test('sortProvidersForSidebar: pinned first, disabled last', () => {
+    const sorted = RouterProvider.sortProvidersForSidebar([
+        { id: 'a', name: 'A', baseUrl: '', disabled: true },
+        { id: 'b', name: 'B', baseUrl: '', pinned: true },
+        { id: 'c', name: 'C', baseUrl: '' },
+        { id: 'd', name: 'D', baseUrl: '', disabled: true, pinned: true }
+    ]);
+
+    assert.deepStrictEqual(sorted.map(p => p.id), ['b', 'c', 'd', 'a']);
+});
+
+test('sortProvidersForSidebar: stored order is the tie-breaker', () => {
+    const sorted = RouterProvider.sortProvidersForSidebar([
+        { id: 'z', name: 'Z', baseUrl: '' },
+        { id: 'y', name: 'Y', baseUrl: '' },
+        { id: 'x', name: 'X', baseUrl: '' }
+    ]);
+
+    assert.deepStrictEqual(sorted.map(p => p.id), ['z', 'y', 'x']);
+});
+
+test('sortProvidersForSidebar: does not mutate the input', () => {
+    const providers = [
+        { id: 'a', name: 'A', baseUrl: '', disabled: true },
+        { id: 'b', name: 'B', baseUrl: '', pinned: true }
+    ];
+
+    RouterProvider.sortProvidersForSidebar(providers);
+
+    assert.deepStrictEqual(
+        providers.map(p => p.id),
+        ['a', 'b']
+    );
 });
 
 // ---------------------------------------------------------------

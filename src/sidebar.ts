@@ -279,11 +279,9 @@ export class RouterSidebar
                     );
                     break;
 
-                case 'openFreeModelsSettings':
-                    await vscode.commands.executeCommand(
-                        'workbench.action.openSettings',
-                        'routerModels.freeModelsUrl'
-                    );
+                case 'enableFreeModels':
+                    await this.provider.setFreeModelsEnabled(true);
+                    await this.pushState();
                     break;
 
                 case 'hideOffersBanner':
@@ -366,5 +364,4 @@ export class RouterSidebar
 </html>`;
     }
 }
-
 

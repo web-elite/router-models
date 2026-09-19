@@ -2,7 +2,7 @@
   "name": "router-models",
   "displayName": "Router Models",
   "description": "Add OpenAI-compatible providers to VS Code Chat (Copilot) and route requests to different models based on their capabilities, cost, and availability.",
-  "version": "0.1.6",
+  "version": "0.1.8",
   "icon": "media/icon.png",
   "publisher": "alireza-yaghouti",
   "license": "MIT",
@@ -183,22 +183,17 @@
           "default": false,
           "description": "Also sync API keys across machines through VS Code Settings Sync (requires Settings Sync to be turned on with your GitHub / Microsoft account). When off, keys stay in each machine's secure storage and are never synced. Enabling this writes the keys into the Settings Sync backup."
         },
-        "routerModels.freeModelsUrl": {
-          "type": "string",
-          "default": "",
-          "description": "URL of a JSON file that lists the free models of each provider, e.g. https://example.com/router-models-free.json. Providers are matched by the base URL's domain, so this works for any provider you add. The ROUTER_MODELS_FREE_URL environment variable overrides this setting when set."
-        },
-        "routerModels.freeModelsAutoRefresh": {
+        "routerModels.freeModelsEnabled": {
           "type": "boolean",
-          "default": true,
-          "description": "Automatically re-download the free-models list (see \"Router Models: Free Models Url\") every few hours so newly published free models are picked up without any action."
+          "default": false,
+          "description": "Detect free models automatically by downloading a curated list maintained by the extension author. Providers are matched by the base URL's domain, so this works for any provider you add. Off by default; nothing is downloaded until you turn it on."
         },
         "routerModels.freeModelsRefreshHours": {
           "type": "number",
           "default": 24,
           "minimum": 1,
           "maximum": 720,
-          "description": "How often (in hours) the free-models list is re-downloaded automatically. 24 means once a day."
+          "description": "How often (in hours) the free-models list is re-downloaded automatically when it is enabled. 24 means once a day."
         }
       }
     }

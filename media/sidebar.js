@@ -488,13 +488,14 @@
             return;
         }
 
-        // Nothing configured yet — keep the footer out of the way.
-        if (!info.url) {
+        // Feature is turned off — keep the footer out of the way.
+        if (!info.enabled) {
             box.classList.remove('hidden');
             box.innerHTML =
                 '<span class="fs-text">Free-models detection is off.</span> ' +
-                '<button class="fs-link" data-action="open-free-settings">' +
-                'Configure</button>';
+                '<button class="fs-link" data-action="enable-free" ' +
+                'title="Turn on automatic free-models detection">' +
+                'Enable</button>';
             return;
         }
 
@@ -509,9 +510,7 @@
             text += ' \u2022 updated ' + when;
         }
 
-        if (info.autoRefresh) {
-            text += ' \u2022 auto ' + info.intervalHours + 'h';
-        }
+        text += ' \u2022 auto ' + info.intervalHours + 'h';
 
         box.classList.remove('hidden');
         box.innerHTML =
@@ -945,8 +944,8 @@
 
             if (action === 'refresh-free') {
                 post({ type: 'refreshFreeModels' });
-            } else if (action === 'open-free-settings') {
-                post({ type: 'openFreeModelsSettings' });
+            } else if (action === 'enable-free') {
+                post({ type: 'enableFreeModels' });
             }
         });
 

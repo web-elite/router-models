@@ -1,10 +1,11 @@
 /**
  * Remote "free models" registry.
  *
- * A JSON file, hosted anywhere and configured through the
- * `routerModels.freeModelsUrl` setting (or the
- * `ROUTER_MODELS_FREE_URL` environment variable), lists the model ids
- * that are free to use for a given provider. Providers declared in
+ * A JSON file, curated by the extension author and shipped as a
+ * built-in service (see `RouterProvider.FREE_MODELS_URL`), lists the
+ * model ids that are free to use for a given provider. Users only
+ * turn the feature on or off (`routerModels.freeModelsEnabled`); the
+ * URL itself is never exposed as a setting. Providers declared in
  * that file are matched against the providers the user added by
  * comparing the *registrable domain* of their base URL, so
  * `https://openrouter.ai/api/v1` in the file matches a user-entered

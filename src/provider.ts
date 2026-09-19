@@ -265,7 +265,20 @@ export class RouterProvider
      */
     private static readonly FREE_MODELS_KEY =
         'router-models.free-models';
-    /** Environment variable that overrides the URL setting. */
+    /**
+     * Curated free-models registry maintained by the extension
+     * author. This is a service shipped with the extension, so the
+     * URL is intentionally NOT a user setting; users only turn the
+     * whole feature on or off (`routerModels.freeModelsEnabled`).
+     */
+    private static readonly FREE_MODELS_URL =
+        'https://raw.githubusercontent.com/web-elite/' +
+        'router-models/refs/heads/main/data/free-models.json';
+    /**
+     * Optional developer-only override of `FREE_MODELS_URL`. Not
+     * documented anywhere; it exists so the list can be repointed
+     * (e.g. to a staging file) without shipping an update.
+     */
     private static readonly FREE_MODELS_ENV = 'ROUTER_MODELS_FREE_URL';
     /**
      * globalState key remembering that the user hid the
@@ -343,13 +356,10 @@ export class RouterProvider
 
             if (
                 event.affectsConfiguration(
-                    'routerModels.freeModelsUrl'
+                    'routerModels.freeModelsEnabled'
                 ) ||
                 event.affectsConfiguration(
                     'routerModels.freeModelsRefreshHours'
-                ) ||
-                event.affectsConfiguration(
-                    'routerModels.freeModelsAutoRefresh'
                 )
             ) {
                 this.scheduleFreeModelsRefresh();
@@ -478,23 +488,48 @@ export class RouterProvider
     // ---------------------------------------------------------------
 
     /**
-     * The URL of the free-models file. The
-     * `ROUTER_MODELS_FREE_URL` environment variable wins over the
-     * `routerModels.freeModelsUrl` setting when it is set.
+     * Whether the user opted in to automatic free-models detection.
+     * Off by default; nothing is downloaded until this is on.
      */
-    freeModelsUrl(): string | undefined {
+    freeModelsEnabled(): boolean {
+        return vscode.workspace
+            .getConfiguration('routerModels')
+            .get<boolean>('freeModelsEnabled', false);
+    }
+
+    /**
+     * Turns automatic free-models detection on or off and applies the
+     * side effects (starts/stops the refresh timer, fetches on enable).
+     */
+    async setFreeModelsEnabled(enabled: boolean): Promise<void> {
+        await vscode.workspace
+            .getConfiguration('routerModels')
+            .update(
+                'freeModelsEnabled',
+                enabled,
+                vscode.ConfigurationTarget.Global
+            );
+
+        // The config watcher re-schedules the timer; on enable it
+        // also kicks off the first download right away.
+        if (enabled) {
+            void this.backgroundRefreshFreeModels();
+        }
+    }
+
+    /**
+     * The URL of the free-models file. The undocumented
+     * `ROUTER_MODELS_FREE_URL` environment variable can repoint it,
+     * otherwise the curated list shipped with the extension is used.
+     */
+    freeModelsUrl(): string {
         const env = process.env[RouterProvider.FREE_MODELS_ENV];
 
         if (env && env.trim()) {
             return env.trim();
         }
 
-        const configured = vscode.workspace
-            .getConfiguration('routerModels')
-            .get<string>('freeModelsUrl', '')
-            .trim();
-
-        return configured || undefined;
+        return RouterProvider.FREE_MODELS_URL;
     }
 
     private async saveFreeIndex(): Promise<void> {
@@ -518,14 +553,10 @@ export class RouterProvider
      * a model that is dropped from the file stops being free again.
      */
     async refreshFreeModels(): Promise<FreeModelsIndex> {
-        const url = this.freeModelsUrl();
-
-        if (!url) {
+        if (!this.freeModelsEnabled()) {
             throw new Error(
-                'No free-models URL configured. Set ' +
-                    '"routerModels.freeModelsUrl" or the ' +
-                    `${RouterProvider.FREE_MODELS_ENV} environment ` +
-                    'variable first.'
+                'Free-models detection is turned off. Enable it via ' +
+                    '"routerModels.freeModelsEnabled" first.'
             );
         }
 
@@ -533,7 +564,10 @@ export class RouterProvider
             .getConfiguration('routerModels')
             .get<number>('requestTimeoutMs', 30000);
 
-        const index = await fetchFreeModelsRegistry(url, timeoutMs);
+        const index = await fetchFreeModelsRegistry(
+            this.freeModelsUrl(),
+            timeoutMs
+        );
 
         this.freeIndex = index;
         await this.saveFreeIndex();
@@ -544,17 +578,14 @@ export class RouterProvider
 
     /** Manual refresh with progress UI and a result message. */
     async refreshFreeModelsFlow(): Promise<void> {
-        if (!this.freeModelsUrl()) {
+        if (!this.freeModelsEnabled()) {
             const choice = await vscode.window.showWarningMessage(
-                'Router Models: no free-models URL is configured.',
-                'Open Settings'
+                'Router Models: free-models detection is turned off.',
+                'Enable'
             );
 
-            if (choice === 'Open Settings') {
-                await vscode.commands.executeCommand(
-                    'workbench.action.openSettings',
-                    'routerModels.freeModelsUrl'
-                );
+            if (choice === 'Enable') {
+                await this.setFreeModelsEnabled(true);
             }
 
             return;
@@ -619,7 +650,7 @@ export class RouterProvider
 
         const config = vscode.workspace.getConfiguration('routerModels');
 
-        if (!config.get<boolean>('freeModelsAutoRefresh', true)) {
+        if (!this.freeModelsEnabled()) {
             return;
         }
 
@@ -639,7 +670,7 @@ export class RouterProvider
      * machine that was asleep / off for days still catches up.
      */
     private maybeRefreshStaleFreeModels(): void {
-        if (!this.freeModelsUrl()) {
+        if (!this.freeModelsEnabled()) {
             return;
         }
 
@@ -665,8 +696,7 @@ export class RouterProvider
 
     /** Status shown in the sidebar footer. */
     freeModelsStatus(): {
-        url: string | undefined;
-        autoRefresh: boolean;
+        enabled: boolean;
         intervalHours: number;
         updatedAt: string | undefined;
         fetchedAt: string | undefined;
@@ -676,11 +706,7 @@ export class RouterProvider
         const config = vscode.workspace.getConfiguration('routerModels');
 
         return {
-            url: this.freeModelsUrl(),
-            autoRefresh: config.get<boolean>(
-                'freeModelsAutoRefresh',
-                true
-            ),
+            enabled: this.freeModelsEnabled(),
             intervalHours: config.get<number>(
                 'freeModelsRefreshHours',
                 24

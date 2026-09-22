@@ -35,6 +35,66 @@
     }
 
     /**
+     * Transient success/failure toast that floats over the list so the
+     * user can see that a click actually did something.
+     *
+     * @param {string} kind  'success' | 'error' | 'info'
+     * @param {string} title  Short human-readable heading.
+     * @param {string} detail Optional second line (e.g. the provider
+     *                       name, the model count, or an error text).
+     */
+    function showToast(kind, title, detail) {
+        var wrap = document.getElementById('toast-wrap');
+
+        if (!wrap) {
+            return;
+        }
+
+        var toast = document.createElement('div');
+        toast.className = 'toast ' + kind;
+
+        var icons = { success: '&#9989;', error: '&#9888;', info: '&#9432;' };
+
+        var icon = document.createElement('span');
+        icon.className = 'toast-icon';
+        icon.innerHTML = icons[kind] || icons.info;
+        toast.appendChild(icon);
+
+        var body = document.createElement('div');
+
+        var line1 = document.createElement('div');
+        line1.className = 'toast-title';
+        line1.textContent = title;
+        body.appendChild(line1);
+
+        if (detail) {
+            var line2 = document.createElement('div');
+            line2.className = 'toast-detail';
+            line2.textContent = detail;
+            body.appendChild(line2);
+        }
+
+        toast.appendChild(body);
+        wrap.appendChild(toast);
+
+        // Force reflow so the transition plays from the initial state.
+        void toast.offsetWidth;
+        toast.classList.add('show');
+
+        var dismiss = function () {
+            toast.classList.remove('show');
+
+            setTimeout(function () {
+                if (toast.parentNode) {
+                    toast.parentNode.removeChild(toast);
+                }
+            }, 200);
+        };
+
+        setTimeout(dismiss, 3500);
+    }
+
+    /**
      * Turns a raw provider error into a short, human-readable line.
      * Extracts the meaningful message from JSON error bodies and
      * strips request-id noise.
@@ -990,6 +1050,12 @@
             render();
         } else if (message.type === 'error') {
             showError(message.message || 'Unknown error.');
+        } else if (message.type === 'feedback') {
+            showToast(
+                message.kind || 'info',
+                message.title || '',
+                message.detail || undefined
+            );
         }
     });
 

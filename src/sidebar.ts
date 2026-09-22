@@ -85,6 +85,38 @@ export class RouterSidebar
         await this.pushState();
     }
 
+    /**
+     * Shows a transient feedback toast in the webview so the user can
+     * see that an action (refresh / edit / …) actually happened.
+     */
+    private async postFeedback(
+        kind: 'success' | 'error' | 'info',
+        title: string,
+        detail?: string
+    ): Promise<void> {
+        await this.view?.webview.postMessage({
+            type: 'feedback',
+            kind,
+            title,
+            detail
+        });
+    }
+
+    /**
+     * Resolves a provider's display name for feedback messages.
+     */
+    private async providerName(id: string): Promise<string> {
+        const snapshot = await this.provider.getSnapshot();
+
+        for (const provider of snapshot.providers) {
+            if (provider.id === id) {
+                return provider.name;
+            }
+        }
+
+        return '';
+    }
+
     // ---------------------------------------------------------------
     // Messages from the webview
     // ---------------------------------------------------------------
@@ -139,6 +171,11 @@ export class RouterSidebar
                 case 'refreshAll':
                     await this.provider.refreshAll();
                     await this.pushState();
+                    await this.postFeedback(
+                        'success',
+                        'Refreshed all providers',
+                        'Model lists are up to date.'
+                    );
                     break;
 
                 case 'refreshFreeModels':
@@ -146,26 +183,65 @@ export class RouterSidebar
                     await this.pushState();
                     break;
 
-                case 'refreshProvider':
-                    await this.provider.refreshProvider(
-                        String(message.providerId)
-                    );
-                    await this.pushState();
-                    break;
+                case 'refreshProvider': {
+                    const providerId = String(message.providerId);
+                    const name = await this.providerName(providerId);
 
-                case 'addProvider':
-                    await this.provider.addProvider({
-                        name: String(message.name ?? ''),
-                        id: this.str(message.id),
-                        baseUrl: String(message.baseUrl ?? ''),
-                        apiKey: this.str(message.apiKey),
-                        iconUrl: this.str(message.iconUrl),
-                        cooldownSeconds: this.cooldownInput(
-                            message.cooldownSeconds
-                        )
-                    });
-                    await this.pushState();
+                    try {
+                        const count =
+                            await this.provider.refreshProvider(providerId);
+                        await this.pushState();
+                        await this.postFeedback(
+                            'success',
+                            'Refreshed',
+                            `${name || 'provider'} — ${count} model(s) found.`
+                        );
+                    } catch (error) {
+                        await this.pushState();
+                        await this.postFeedback(
+                            'error',
+                            'Refresh failed',
+                            `${name || 'provider'}: ` +
+                                (error instanceof Error
+                                    ? error.message
+                                    : String(error))
+                        );
+                    }
                     break;
+                }
+
+                case 'addProvider': {
+                    const name = String(message.name ?? '');
+
+                    try {
+                        await this.provider.addProvider({
+                            name,
+                            id: this.str(message.id),
+                            baseUrl: String(message.baseUrl ?? ''),
+                            apiKey: this.str(message.apiKey),
+                            iconUrl: this.str(message.iconUrl),
+                            cooldownSeconds: this.cooldownInput(
+                                message.cooldownSeconds
+                            )
+                        });
+                        await this.pushState();
+                        await this.postFeedback(
+                            'success',
+                            'Provider added',
+                            `${name} is now in the model picker.`
+                        );
+                    } catch (error) {
+                        await this.pushState();
+                        await this.postFeedback(
+                            'error',
+                            'Could not add provider',
+                            error instanceof Error
+                                ? error.message
+                                : String(error)
+                        );
+                    }
+                    break;
+                }
 
                 case 'updateProvider': {
                     const patch = (message.patch ?? {}) as {
@@ -176,9 +252,13 @@ export class RouterSidebar
                         cooldownSeconds?: unknown;
                     };
 
-                    await this.provider.updateProvider(
-                        String(message.providerId),
-                        {
+                    const providerId = String(message.providerId);
+                    const providerName =
+                        this.str(patch.name) ??
+                        (await this.providerName(providerId));
+
+                    try {
+                        await this.provider.updateProvider(providerId, {
                             name: this.str(patch.name),
                             baseUrl: this.str(patch.baseUrl),
                             apiKey: patch.apiKey !== undefined
@@ -193,9 +273,24 @@ export class RouterSidebar
                                           patch.cooldownSeconds
                                       )
                                     : undefined
-                        }
-                    );
-                    await this.pushState();
+                        });
+                        await this.pushState();
+                        await this.postFeedback(
+                            'success',
+                            'Provider updated',
+                            `${providerName || 'Provider'} saved.`
+                        );
+                    } catch (error) {
+                        await this.pushState();
+                        await this.postFeedback(
+                            'error',
+                            'Update failed',
+                            `${providerName || 'Provider'}: ` +
+                                (error instanceof Error
+                                    ? error.message
+                                    : String(error))
+                        );
+                    }
                     break;
                 }
 
@@ -365,6 +460,7 @@ export class RouterSidebar
     <div id="error" class="error hidden"></div>
     <main id="root"></main>
     <div id="free-status" class="free-status hidden"></div>
+    <div id="toast-wrap" class="toast-wrap"></div>
 
     <script nonce="${nonce}" src="${media('sidebar.js')}"></script>
 </body>

@@ -103,6 +103,87 @@ body {
     word-break: break-word;
 }
 
+/* Transient operation feedback (success / failure) that floats over */
+/* the list and auto-dismisses, so the user knows a click actually */
+/* did something. */
+.toast-wrap {
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    pointer-events: none;
+    z-index: 100;
+}
+
+.toast {
+    pointer-events: auto;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    line-height: 1.4;
+    border: 1px solid transparent;
+    opacity: 0;
+    transform: translateY(8px);
+    transition:
+        opacity 0.18s ease,
+        transform 0.18s ease;
+}
+
+.toast.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.toast .toast-icon {
+    flex: 0 0 auto;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.toast .toast-title {
+    font-weight: 600;
+}
+
+.toast .toast-detail {
+    color: var(--vscode-descriptionForeground);
+    word-break: break-word;
+}
+
+.toast.success {
+    background: var(--vscode-testing-passedIcon-foreground,
+        rgba(60, 180, 120, 0.15));
+    border-color: rgba(60, 180, 120, 0.4);
+    color: var(--vscode-foreground);
+    backdrop-filter: blur(20px) contrast(1.5);
+}
+
+.toast.error {
+    background: var(--vscode-inputValidation-errorBackground,
+        rgba(240, 90, 90, 0.15));
+    border-color: rgba(240, 90, 90, 0.45);
+    color: var(--vscode-errorForeground, #f66);
+    backdrop-filter: blur(20px) contrast(1.5);
+}
+
+.toast.error .toast-detail {
+    color: var(--vscode-errorForeground, #f66);
+    opacity: 0.85;
+}
+
+.toast.info {
+    background: var(--vscode-editorWidget-background,
+        rgba(128, 128, 128, 0.12));
+    border-color: rgba(128, 128, 128, 0.35);
+    color: var(--vscode-foreground);
+    backdrop-filter: blur(20px) contrast(1.5);
+}
+
 .empty {
     text-align: center;
     color: var(--vscode-descriptionForeground);

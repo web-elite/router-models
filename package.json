@@ -2,7 +2,7 @@
   "name": "router-models",
   "displayName": "Router Models",
   "description": "Use custom AI models in GitHub Copilot Chat — OpenRouter, Ollama, LM Studio, Groq, OpenAI or any OpenAI-compatible API. BYOK with multiple keys and auto rotation, free models, cost-aware routing.",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "icon": "media/icon.png",
   "publisher": "alireza-yaghouti",
   "license": "MIT",

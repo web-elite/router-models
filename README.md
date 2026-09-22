@@ -4,11 +4,12 @@
 
 # 🚀 Router Models
 
-**Use any AI provider — OpenAI, OpenRouter, Groq, Ollama, LM Studio and
-more — directly inside VS Code Copilot Chat.**
+**Add custom AI models to VS Code Copilot Chat — OpenRouter, Ollama, LM
+Studio, Groq, OpenAI, or any OpenAI-compatible provider.**
 
-Bring your own API keys, pick your favorite models, and chat. It's free
-and open source.
+Bring your own API keys (BYOK) — paste several and they rotate
+automatically, tag free models, even use local models on your machine.
+It's free and open source.
 
 [![Release](https://img.shields.io/github/v/release/web-elite/router-models?label=Release&logo=github)](https://github.com/web-elite/router-models/releases/latest)
 [![VS Code](https://img.shields.io/badge/VS_Code-%3E%3D_1.104-blue?logo=visualstudiocode)](https://code.visualstudio.com/updates/v1_104)

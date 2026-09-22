@@ -5,21 +5,95 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.8] - 2026-09-19
 
 ### Added
 
-- Export: `Router Models: Export Providers to JSON` (also a ⤒ button
-  in the sidebar header) writes every provider — endpoint, icon,
-  cooldown, models, manual entries and "free" tags, plus the
-  include/exclude patterns — to a JSON file. API keys can be included
-  (opt-in, written as plain text — keep the file private) or left out
-- Import of the extension's own export format: `Router Models:
-  Import Providers from JSON` detects `router-models-export` files
-  and offers **Merge** (adds new providers, merges keys and models,
-  skips duplicates) or **Replace** (confirmed full restore, including
-  the exported include/exclude patterns); exports written by a newer
-  version are imported best-effort
+- The provider list now carries a revision timestamp that syncs
+  alongside it. When the two machines have both edited the provider
+  list, the newest write wins — the other machine re-reads the
+  revision on load / `Reload from Settings Sync` and repersists its
+  own newer copy so it is not silently overwritten by a stale
+  cloud snapshot
+
+- Free model detector: a curated free-models registry shipped with
+  the extension is matched against each provider by its base URL's
+  domain, so models are flagged as free automatically for any
+  provider you add
+
+## [0.1.7] - 2026-09-19
+
+### Added
+
+- Free model detection from the extension's own curated source
+  (`routerModels.freeModelsEnabled`, off by default) plus the
+  periodic re-download of that list
+  (`routerModels.freeModelsRefreshHours`, default 24 h)
+- An in-sidebar banner that surfaces free AI providers
+- `Router Models: Detect Free Models` command to force a refresh
+
+### Fixed
+
+- The provider name is now shown in the Copilot model picker
+
+## [0.1.6] - 2026-09-19
+
+### Added
+
+- The provider name is shown next to every model in the Copilot
+  model picker
+- Automatic retry on Copilot / provider errors, with exponential
+  backoff, so transient blips (rate limits, 5xx, empty responses,
+  dropped connections) no longer stop unattended runs
+
+## [0.1.5] - 2026-09-16
+
+### Added
+
+- Favicon resolution from the main domain when the provider host has
+  no favicon of its own
+- Reworked sidebar styling for a cleaner look
+
+### Fixed
+
+- Provider icon rendering
+
+## [0.1.2] - 2026-09-13
+
+### Fixed
+
+- Management command structure and the sidebar icon field in
+  `package.json` so the extension activates and its view renders
+  correctly
+
+### Changed
+
+- README header links and star-callout formatting
+
+## [0.1.0] - 2026-09-13
+
+### Changed
+
+- Bumped the extension to the 0.1.x series (stable rename from the
+  0.0.x pre-release line)
+
+## [0.0.9] - 2026-09-13
+
+### Added
+
+- Provider JSON export: `Router Models: Export Providers to JSON`
+  (also a ⤒ button in the sidebar header) writes every provider —
+  endpoint, icon, cooldown, models, manual entries and "free" tags,
+  plus the include/exclude patterns — to a JSON file. API keys can be
+  included (opt-in, written as plain text — keep the file private) or
+  left out
+- Provider JSON import of the extension's own export format:
+  `Router Models: Import Providers from JSON` detects
+  `router-models-export` files and offers **Merge** (adds new
+  providers, merges keys and models, skips duplicates) or **Replace**
+  (confirmed full restore, including the exported include/exclude
+  patterns); exports written by a newer version are imported
+  best-effort
 - Settings Sync support: the provider list and the model cache
   (manual models and "free" tags included) sync across machines
   through VS Code Settings Sync (GitHub / Microsoft account). The new
@@ -30,14 +104,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sidebar) picks up changes, since VS Code fires no event for synced
   global state
 
-- Free model tagging: every model in the sidebar has a **+ free** toggle —
-  tagged models show a green **✓ free** badge and are listed as
-  `Name (free)` in the Copilot model picker, so typing "free" in the
-  picker's search box finds all free models across every provider.
-  Models whose id or name already contains "free" (e.g. OpenRouter's
-  `:free` variants) are tagged automatically, the flag survives model
-  refreshes, and the sidebar **+ Model** form (plus the
-  `Router Models: Add Model Manually` command) offers a free option too.
+## [0.0.8] - 2026-09-12
+
+### Added
+
+- Free model tagging: every model in the sidebar has a **+ free**
+  toggle — tagged models show a green **✓ free** badge and are listed
+  as `Name (free)` in the Copilot model picker, so typing "free" in
+  the picker's search box finds all free models across every
+  provider. Models whose id or name already contains "free" (e.g.
+  OpenRouter's `:free` variants) are tagged automatically; the flag
+  survives model refreshes, and the sidebar **+ Model** form (plus the
+  `Router Models: Add Model Manually` command) offers a free option
+  too
+
+## [0.0.7] - 2026-09-12
+
+### Changed
+
+- Logo color
+
+### Added
+
+- README updates
+
+## [0.0.6] - 2026-09-11
+
+### Changed
+
+- Prepared the 0.0.6 marketplace release
+
+## [0.0.5] - 2026-09-11
+
+### Fixed
+
+- Robust file decoding on JSON import: BOM and UTF-16 encoded files
+  are now read correctly
+- File sizes reported in import / export messages are now accurate
 
 ## [0.0.4] - 2026-09-11
 

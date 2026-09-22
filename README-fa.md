@@ -4,11 +4,12 @@
 
 # 🚀 مدل‌های روتر (Router Models)
 
-**هر هوش مصنوعی‌ای که بخوای — OpenAI، OpenRouter، Groq، Ollama، LM Studio و
-بیشتر — مستقیم توی Copilot Chat وی‌‌اس‌کد.**
+**مدل‌های دلخواه خودت (custom models) رو به Copilot Chat وی‌‌اس‌کد اضافه کن —
+OpenRouter، Ollama، LM Studio، Groq، OpenAI یا هر سرویسِ سازگار با OpenAI.**
 
-کلیدهای API خودت رو بیار، مدل‌های مورد علاقه‌ت رو انتخاب کن و چت کن. رایگان
-و متن‌بازه.
+کلیدهای API خودت رو بیار (BYOK) — چند تا کلید بچسبون تا خودکار جابه‌جا شن،
+مدل‌های رایگان رو تگ بزن، حتی مدل‌های لوکال روی سیستم خودت. رایگان و
+متن‌بازه.
 
 [![Release](https://img.shields.io/github/v/release/web-elite/router-models?label=Release&logo=github)](https://github.com/web-elite/router-models/releases/latest)
 [![VS Code](https://img.shields.io/badge/VS_Code-%3E%3D_1.104-blue?logo=visualstudiocode)](https://code.visualstudio.com/updates/v1_104)

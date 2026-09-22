@@ -22,6 +22,16 @@ export const SERVER_FALLBACK_STATUSES: readonly number[] = [
  */
 export const AUTH_FAILURE_STATUSES: readonly number[] = [401, 403];
 
+/**
+ * Standard, public browser User-Agent used for all outbound provider
+ * requests. A generic, widely-recognized desktop browser string is
+ * sent so providers that fingerprint the client do not reject the
+ * request with "unauthorized client detected" (HTTP 401).
+ */
+export const USER_AGENT =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+    + '(KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36';
+
 export type KeyStatus = 'ready' | 'cooldown' | 'burned';
 
 export type KeyDetail = {

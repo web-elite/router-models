@@ -12,6 +12,7 @@ import {
     parseNamedKeys,
     parseRetryAfter,
     truncate,
+    USER_AGENT,
     KeyManager,
     KeyStats,
     NamedKey,
@@ -1849,6 +1850,7 @@ export class RouterProvider
                 signal: init.signal ?? controller.signal,
                 headers: {
                     'Content-Type': 'application/json',
+                    'User-Agent': USER_AGENT,
                     ...(apiKey
                         ? { Authorization: `Bearer ${apiKey}` }
                         : {}),

@@ -15,6 +15,8 @@
  * tested in isolation, like `import.ts` and `keys.ts`.
  */
 
+import { USER_AGENT } from './keys';
+
 /** One provider inside the remote registry file. */
 export type RegistryProvider = {
     baseUrl: string;
@@ -362,7 +364,10 @@ export async function fetchFreeModelsRegistry(
     try {
         const response = await fetch(url, {
             method: 'GET',
-            headers: { Accept: 'application/json' },
+            headers: {
+                Accept: 'application/json',
+                'User-Agent': USER_AGENT
+            },
             redirect: 'follow',
             signal: controller.signal
         });

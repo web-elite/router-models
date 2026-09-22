@@ -2,9 +2,8 @@
 // Automatic favicon discovery for a provider's base URL.
 // ------------------------------------------------------------------
 
-const USER_AGENT =
-    'Mozilla/5.0 (compatible; RouterModels/0.3; ' +
-    '+https://github.com/web-elite/router-models)';
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36';
+//'Mozilla/5.0 (compatible; RouterModels/0.3; ' + '+https://github.com/web-elite/router-models)';
 
 const MAX_HTML_BYTES = 300_000;
 

@@ -608,7 +608,7 @@
             '" data-action="pin" data-pid="' + esc(provider.id) + '" ' +
             'title="' + (pinned ? 'Unpin provider' : 'Pin to top') +
             '" tabindex="0" aria-pressed="' + (pinned ? 'true' : 'false') +
-            '">' + (pinned ? '📌' : '📍') + '</button>';
+            '">' + (pinned ? '📌' : 'Pin') + '</button>';
 
         // Enable / disable toggle switch
         html += '<label class="switch" data-action="toggle-disabled" ' +

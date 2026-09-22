@@ -305,11 +305,25 @@ export class RouterProvider
      * VS Code Settings Sync (SecretStorage itself is never synced).
      */
     private static readonly SYNC_KEYS_KEY = 'router-models.sync.keys';
+    /**
+     * globalState key holding the revision (last-modified timestamp,
+     * milliseconds) of the provider list. Participates in Settings
+     * Sync so two machines can compare which copy of the provider
+     * list is newer — the newest revision wins instead of the one
+     * that happened to upload last.
+     */
+    private static readonly PROVIDERS_REV_KEY = 'router-models.providers-rev';
     /** Marker + version of the extension's own JSON export format. */
     private static readonly EXPORT_KIND = 'router-models-export';
     private static readonly EXPORT_VERSION = 1;
 
     private providers: ProviderConfig[] = [];
+    /**
+     * Last-modified timestamp (ms) of the provider list, persisted
+     * alongside it so the two machines can agree on which is newer
+     * even when Settings Sync delivers them out of order.
+     */
+    private providersRevision: number = 0;
     private cache: Map<string, ModelEntry[]> = new Map();
     private errors: Map<string, string> = new Map();
     private resolved: Map<string, ResolvedModel> = new Map();
@@ -423,9 +437,25 @@ export class RouterProvider
     }
 
     private load(): void {
-        this.providers = this.context.globalState.get<
+        const rev = this.readProvidersRev();
+        const persisted = this.context.globalState.get<
             ProviderConfig[]
         >(RouterProvider.PROVIDERS_KEY, []);
+        const inMemRev = this.providersRevision;
+
+        if (rev >= inMemRev) {
+            // Persisted copy (possibly just delivered by Settings Sync)
+            // is as fresh as or newer than the local in-memory edits —
+            // adopt it.
+            this.providers = persisted;
+            this.providersRevision = rev;
+        } else {
+            // Local in-memory edits are newer than what is on disk / in
+            // sync. Keep them in memory and repersist both the list and
+            // a bumped revision so the next sync round-trip uploads the
+            // newest state instead of the stale one.
+            void this.saveProviders().catch(() => undefined);
+        }
 
         const saved = this.context.globalState.get<
             Record<string, ModelEntry[]>
@@ -460,10 +490,41 @@ export class RouterProvider
     }
 
     private async saveProviders(): Promise<void> {
+        await this.persistProvidersRevision();
         await this.context.globalState.update(
             RouterProvider.PROVIDERS_KEY,
             this.providers
         );
+    }
+
+    /**
+     * Bumps and persists the provider-list revision. The timestamp is
+     * written before (or together with) the list so that on another
+     * machine the newest write is always detected as the winner. The
+     * revision is monotonically increasing — a call with a `base`
+     * that is older than the current in-memory value is treated as a
+     * bump to "now" rather than a rollback.
+     */
+    private async persistProvidersRevision(
+        base?: number
+    ): Promise<void> {
+        const now = Date.now();
+        // Never move the counter backwards: if the caller passed an
+        // older base (e.g. a load that found the synced copy stale),
+        // the effective revision is "now".
+        const rev = Math.max(now, this.providersRevision, base ?? 0);
+        this.providersRevision = rev;
+        await this.context.globalState.update(
+            RouterProvider.PROVIDERS_REV_KEY,
+            rev
+        );
+    }
+
+    private readProvidersRev(): number {
+        const raw = this.context.globalState.get<
+            number
+        >(RouterProvider.PROVIDERS_REV_KEY);
+        return typeof raw === 'number' ? raw : 0;
     }
 
     private async saveCache(): Promise<void> {
@@ -744,6 +805,7 @@ export class RouterProvider
     private applySyncKeys(): void {
         const keys = [
             RouterProvider.PROVIDERS_KEY,
+            RouterProvider.PROVIDERS_REV_KEY,
             RouterProvider.CACHE_KEY,
             RouterProvider.OFFERS_BANNER_KEY,
             RouterProvider.FREE_MODELS_KEY
@@ -847,6 +909,8 @@ export class RouterProvider
             offersBannerHidden: this.offersBannerHidden
         });
 
+        const hadNewerLocal = this.providersRevision > this.readProvidersRev();
+
         this.load();
         this.syncKeysApplied = this.syncApiKeysEnabled();
         this.applySyncKeys();
@@ -859,12 +923,21 @@ export class RouterProvider
             offersBannerHidden: this.offersBannerHidden
         });
 
-        if (before !== after) {
+        const changed = before !== after;
+
+        if (changed) {
             this.fireChanged();
-            return true;
         }
 
-        return false;
+        if (hadNewerLocal && !changed) {
+            // A local edit outpaced the copy that Settings Sync had
+            // already delivered. load() repersisted the newer state so
+            // the next sync cycle picks it up — tell the user rather
+            // than failing silently.
+            void this.saveProviders().catch(() => undefined);
+        }
+
+        return changed;
     }
 
     /**

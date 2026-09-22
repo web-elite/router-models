@@ -21,6 +21,10 @@ It's free and open source.
 
 </div>
 
+<p align="center">
+  <img src="screenshot/main.png" alt="Router Models — VS Code Copilot Chat with custom AI models" width="800">
+</p>
+
 >  
 > ## ⭐ Please give this project a star!
 >

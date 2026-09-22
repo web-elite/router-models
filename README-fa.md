@@ -21,6 +21,10 @@ OpenRouter، Ollama، LM Studio، Groq، OpenAI یا هر سرویسِ سازگ�
 
 </div>
 
+<p align="center">
+  <img src="screenshot/main.png" alt="Router Models — Copilot Chat وی‌‌اس‌کد با مدل‌های دلخواه" width="800">
+</p>
+
 > 
 > ## ⭐ لطفاً به این پروژه ستاره بدید!
 >

@@ -112,6 +112,20 @@
         "qwen3.8-27b",
         "stepfun-3.7-flash"
       ]
+    },
+    {
+      "baseUrl": "https://tokenharbor.ai/v1",
+      "freeModels": [
+        "mimo-v2.6-flash:free",
+        "qwen3.8-flash:free",
+        "deepseek-v4.1-flash:free"
+      ]
+    },
+    {
+      "baseUrl": "https://api.free.ai/v1",
+      "freeModels": [
+        "*"
+      ]
     }
 
   ]

@@ -4,11 +4,115 @@
   "providers": [
     {
       "baseUrl": "https://openrouter.ai/api/v1",
-      "freeModels": ["deepseek/deepseek-chat-v3:free", "meta-llama/*"]
+      "freeModels": [
+        "inclusionai/ling-3.0-flash-vl:free",
+        "nex-agi/nex-n2.5-mini:free",
+        "nex-agi/nex-n2.5-pro:free",
+        "inclusionai/ling-3.0-flash-sante:free",
+        "inclusionai/ling-3.0-flash-fin:free",
+        "liquid/lfm-2.5-embedding-350m:free",
+        "qwen/qwen3.8-27b:free",
+        "dots-studio/dots-3-note-preview:free",
+        "deepgram/flux-tts:free",
+        "liquid/lfm-2.5-2.6b:free",
+        "nvidia/nemotron-3.5-lightning:free",
+        "thinkingmachines/inkling-small:free",
+        "fish-audio/s2.1-pro-free:free",
+        "poolside/laguna-s-2.1:free",
+        "thinkingmachines/inkling:free",
+        "nvidia/nemotron-3-embed-1b:free",
+        "poolside/laguna-xs-2.1:free",
+        "cohere/north-mini-code:free",
+        "z-ai/glm-5.2:free",
+        "nvidia/llama-nemotron-rerank-vl-1b-v2:free",
+        "nvidia/nemotron-3.5-content-safety:free",
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+        "google/gemma-4-26b-a4b-it:free",
+        "google/gemma-4-31b-it:free",
+        "nvidia/nemotron-3-super-120b-a12b:free",
+        "nvidia/llama-nemotron-embed-vl-1b-v2:free"
+      ]
     },
     {
-      "baseUrl": "https://api.deepseek.com",
-      "freeModels": ["deepseek-chat", "deepseek-reasoner"]
+      "baseUrl": "https://api.atria-asi.ai/v1",
+      "freeModels": [
+        "Atria-Dawn-Preview"
+      ]
+    },
+    {
+      "baseUrl": "https://router.bynara.id/v1",
+      "freeModels": [
+        "agnes-2.5-flash",
+        "laguna-s-2.1",
+        "longcat-2.0-free",
+        "mistral-large",
+        "mistral-medium-3-5",
+        "qwen3.8-27b",
+        "stepfun-3.7-flash"
+      ]
+    },
+    {
+      "baseUrl": "https://kiosapi.com/v1",
+      "freeModels": [
+        "agnes-2.0-flash",
+        "agnes-2.5-flash",
+        "agnes-3.0-flash",
+        "atria-dawn-preview",
+        "big-pickle",
+        "diffusiongemma-26b-a4b-it",
+        "dots-3-note-preview",
+        "gpt-oss-20b",
+        "laguna-s-2.1",
+        "lfm-2.5-2.6b",
+        "ling-3.0-flash-fin",
+        "ling-3.0-flash-sante",
+        "ling-3.0-flash-vl",
+        "mimo-v2.5",
+        "muse-glimmer-30b",
+        "muse-spark-1.2-contributor",
+        "muse-spark-1.3-contributor",
+        "nemotron-3-super-120b-a12b",
+        "nemotron-3-ultra-550b-a55b",
+        "nemotron-3.5-lightning"
+      ]
+    },
+    {
+      "baseUrl": "https://api.lumosel.vip/v1",
+      "freeModels": [
+        "agnes-2.5-flash",
+        "laguna-s-2.1",
+        "longcat-2.0-free",
+        "mistral-large",
+        "mistral-medium-3-5",
+        "qwen3.8-27b",
+        "stepfun-3.7-flash"
+      ]
+    },
+    {
+      "baseUrl": "https://api.experientiallabs.ai/v1",
+      "freeModels": [
+        "agnes-2.5-flash",
+        "laguna-s-2.1",
+        "longcat-2.0-free",
+        "mistral-large",
+        "mistral-medium-3-5",
+        "qwen3.8-27b",
+        "stepfun-3.7-flash"
+      ]
+    },
+    {
+      "baseUrl": "https://router.bynara.id/v1",
+      "freeModels": [
+        "agnes-2.5-flash",
+        "laguna-s-2.1",
+        "longcat-2.0-free",
+        "mistral-large",
+        "mistral-medium-3-5",
+        "qwen3.8-27b",
+        "stepfun-3.7-flash"
+      ]
     }
+
   ]
 }

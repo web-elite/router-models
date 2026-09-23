@@ -352,6 +352,13 @@ export class RouterSidebar
                     await this.pushState();
                     break;
 
+                case 'toggleProviderFree':
+                    await this.provider.toggleProviderFree(
+                        String(message.providerId)
+                    );
+                    await this.pushState();
+                    break;
+
                 case 'removeModel':
                     await this.provider.removeManualModel(
                         String(message.providerId),

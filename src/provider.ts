@@ -64,6 +64,11 @@ export type ProviderConfig = {
     disabled?: boolean;
     /** When true the provider stays at the top of the sidebar list. */
     pinned?: boolean;
+    /**
+     * When true every model in this provider is treated as free,
+     * including ones discovered later — no per-model tagging needed.
+     */
+    freeAll?: boolean;
 };
 
 export type ModelEntry = {
@@ -100,6 +105,8 @@ export type ProviderSnapshot = {
     disabled: boolean;
     /** True when the user pinned the provider to the top. */
     pinned: boolean;
+    /** True when the user marked the whole provider as free. */
+    freeAll: boolean;
     models: ModelSnapshot[];
     /** Multi-key statistics for this provider. */
     keys: KeyStats;
@@ -1467,6 +1474,27 @@ export class RouterProvider
         this.fireChanged();
     }
 
+    /**
+     * Marks the whole provider as free (or unmarks it). When on, every
+     * model in this provider — including ones discovered later — is
+     * treated as free without needing per-model tags.
+     */
+    async toggleProviderFree(id: string): Promise<void> {
+        const provider = this.getProvider(id);
+
+        provider.freeAll = !provider.freeAll;
+        await this.saveProviders();
+        this.fireChanged();
+
+        vscode.window.setStatusBarMessage(
+            `Router Models: "${provider.name}" is now ` +
+                (provider.freeAll
+                    ? 'marked as a free provider (all models free).'
+                    : 'no longer marked as a free provider.'),
+            4000
+        );
+    }
+
     async addManualModel(
         providerId: string,
         modelId: string,
@@ -2102,6 +2130,10 @@ export class RouterProvider
         provider: ProviderConfig,
         model: ModelEntry
     ): boolean {
+        if (provider.freeAll) {
+            return true;
+        }
+
         if (model.free) {
             return true;
         }
@@ -2250,6 +2282,7 @@ export class RouterProvider
                 error: this.errors.get(provider.id),
                 disabled: Boolean(provider.disabled),
                 pinned: Boolean(provider.pinned),
+                freeAll: Boolean(provider.freeAll),
                 models,
                 keys: aggregateKeyStats(keyDetails),
                 keyList: keyDetails,

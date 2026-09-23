@@ -609,6 +609,10 @@
     function render() {
         renderFreeStatus();
 
+        // Capture scroll before the DOM rebuild so the list stays in
+        // place when the user rapidly toggles model "free" buttons.
+        var savedScroll = window.scrollY;
+
         if (!snapshot.providers.length) {
             root.innerHTML =
                 '<div class="empty">' +
@@ -620,6 +624,7 @@
                 '<button class="btn secondary" data-action="import-json">' +
                 '&#10515; Import JSON</button></div>' +
                 renderOffersBanner();
+            window.scrollTo(0, savedScroll);
             return;
         }
 
@@ -634,6 +639,7 @@
         html += renderOffersBanner();
 
         root.innerHTML = html;
+        window.scrollTo(0, savedScroll);
     }
 
     function renderProvider(provider) {
@@ -669,6 +675,20 @@
             'title="' + (pinned ? 'Unpin provider' : 'Pin to top') +
             '" tabindex="0" aria-pressed="' + (pinned ? 'true' : 'false') +
             '">' + (pinned ? '📌' : 'Pin') + '</button>';
+
+        // Free-all toggle: marks every model in this provider as free
+        var freeAll = Boolean(provider.freeAll);
+        html += '<button class="freeall-btn' + (freeAll ? ' on' : '') +
+            '" data-action="toggle-provider-free" data-pid="' +
+            esc(provider.id) + '" ' +
+            'title="' + (freeAll
+                ? 'Unmark this provider — models will no longer be ' +
+                  'automatically free'
+                : 'Mark this whole provider as free — every model, ' +
+                  'including new ones, is treated as free') +
+            '" tabindex="0" aria-pressed="' + (freeAll ? 'true' : 'false') +
+            '">' + (freeAll ? '&#10003; free-all' : '+ free-all') +
+            '</button>';
 
         // Enable / disable toggle switch
         html += '<label class="switch" data-action="toggle-disabled" ' +
@@ -932,6 +952,16 @@
             event.stopPropagation();
             post({
                 type: 'togglePinned',
+                providerId: pid
+            });
+            return;
+        }
+
+        if (action === 'toggle-provider-free') {
+            event.preventDefault();
+            event.stopPropagation();
+            post({
+                type: 'toggleProviderFree',
                 providerId: pid
             });
             return;

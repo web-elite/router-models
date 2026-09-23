@@ -1274,6 +1274,10 @@ export class RouterProvider
             apiKeys?: (string | NamedKey)[] | null;
             iconUrl?: string | null;
             cooldownSeconds?: number | null;
+            /** When set, toggles the whole-provider free flag. */
+            freeAll?: boolean;
+            /** When set, enables or disables the provider. */
+            disabled?: boolean;
         }
     ): Promise<void> {
         const provider = this.getProvider(id);
@@ -1344,6 +1348,14 @@ export class RouterProvider
                 typeof seconds === 'number' && seconds >= 0
                     ? Math.floor(seconds)
                     : undefined;
+        }
+
+        if (patch.freeAll !== undefined) {
+            provider.freeAll = patch.freeAll;
+        }
+
+        if (patch.disabled !== undefined) {
+            provider.disabled = patch.disabled || undefined;
         }
 
         if (patch.iconUrl !== undefined) {

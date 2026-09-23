@@ -303,46 +303,11 @@ body {
     opacity: 1;
 }
 
-/* Free-all button — marks the whole provider as free */
-.freeall-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 56px;
-    height: 22px;
-    padding: 0 6px;
-    border: 1px solid transparent;
-    border-radius: 5px;
-    background: transparent;
-    color: var(--vscode-descriptionForeground);
-    font-size: 10px;
-    line-height: 1;
-    cursor: pointer;
-    flex-shrink: 0;
-    opacity: 0.6;
-    transition: opacity 0.12s ease, background 0.12s ease;
-    white-space: nowrap;
-}
-
-.freeall-btn:hover {
-    opacity: 1;
-    background: rgba(128, 128, 128, 0.16);
-}
-
-.freeall-btn:focus-visible {
-    outline: 1px solid var(--vscode-focusBorder);
-    outline-offset: 1px;
-}
-
-.freeall-btn.on {
-    opacity: 1;
+/* Free-all tag — shown on the card head when the provider is free-all */
+.freeall-tag {
+    background: rgba(107, 255, 158, 0.15);
     color: var(--vscode-charts-green, #6bff9e);
-    border-color: var(--vscode-charts-green, #6bff9e);
-    background: rgba(107, 255, 158, 0.1);
-}
-
-.card.pinned .freeall-btn {
-    opacity: 0.85;
+    border: 1px solid rgba(107, 255, 158, 0.4);
 }
 
 .card.pinned {

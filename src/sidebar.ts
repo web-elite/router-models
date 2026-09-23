@@ -250,6 +250,8 @@ export class RouterSidebar
                         apiKey?: unknown;
                         iconUrl?: unknown;
                         cooldownSeconds?: unknown;
+                        freeAll?: unknown;
+                        disabled?: unknown;
                     };
 
                     const providerId = String(message.providerId);
@@ -272,6 +274,14 @@ export class RouterSidebar
                                     ? this.cooldownInput(
                                           patch.cooldownSeconds
                                       )
+                                    : undefined,
+                            freeAll:
+                                patch.freeAll !== undefined
+                                    ? patch.freeAll === true
+                                    : undefined,
+                            disabled:
+                                patch.disabled !== undefined
+                                    ? patch.disabled === true
                                     : undefined
                         });
                         await this.pushState();

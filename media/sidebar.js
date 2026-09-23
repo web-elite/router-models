@@ -359,6 +359,18 @@
                     value: provider.baseUrl
                 },
                 {
+                    key: 'freeAll',
+                    label: 'All models free — every model in this provider is treated as free, including ones discovered later',
+                    checkbox: true,
+                    value: Boolean(provider.freeAll)
+                },
+                {
+                    key: 'disabled',
+                    label: 'Disabled — provider is hidden from the model picker',
+                    checkbox: true,
+                    value: Boolean(provider.disabled)
+                },
+                {
                     key: 'cooldownSeconds',
                     label: 'Cooldown seconds after 429 (empty = default)',
                     value: String(
@@ -388,6 +400,9 @@
                 if (values.baseUrl && values.baseUrl !== provider.baseUrl) {
                     patch.baseUrl = values.baseUrl;
                 }
+
+                patch.freeAll = values.freeAll === true;
+                patch.disabled = values.disabled === true;
 
                 // Empty input clears the per-provider override.
                 patch.cooldownSeconds =
@@ -676,29 +691,12 @@
             '" tabindex="0" aria-pressed="' + (pinned ? 'true' : 'false') +
             '">' + (pinned ? '📌' : 'Pin') + '</button>';
 
-        // Free-all toggle: marks every model in this provider as free
-        var freeAll = Boolean(provider.freeAll);
-        html += '<button class="freeall-btn' + (freeAll ? ' on' : '') +
-            '" data-action="toggle-provider-free" data-pid="' +
-            esc(provider.id) + '" ' +
-            'title="' + (freeAll
-                ? 'Unmark this provider — models will no longer be ' +
-                  'automatically free'
-                : 'Mark this whole provider as free — every model, ' +
-                  'including new ones, is treated as free') +
-            '" tabindex="0" aria-pressed="' + (freeAll ? 'true' : 'false') +
-            '">' + (freeAll ? '&#10003; free-all' : '+ free-all') +
-            '</button>';
-
-        // Enable / disable toggle switch
-        html += '<label class="switch" data-action="toggle-disabled" ' +
-            'data-pid="' + esc(provider.id) + '" ' +
-            'title="' + (disabled ? 'Enable provider' : 'Disable provider') +
-            '" tabindex="0">';
-        html += '<input type="checkbox" ' +
-            (disabled ? '' : 'checked') + ' ' +
-            'data-switch="' + esc(provider.id) + '" tabindex="-1">';
-        html += '<span class="slider"></span></label>';
+        // Free-all indicator — toggle via Edit popup
+        if (Boolean(provider.freeAll)) {
+            html += '<span class="tag freeall-tag" '
+                + 'title="All models in this provider are treated as free. Toggle in Edit."'
+                + '>&#10003; free-all</span>';
+        }
 
         html += '<span class="badge">' +
             provider.models.length + 'Models</span>';
@@ -873,33 +871,6 @@
     root.addEventListener('click', function (event) {
         var target = event.target;
 
-        // Switch handles its own toggle — don't bubble to card expand
-        var switchLabel = target.closest('.switch[data-action="toggle-disabled"]');
-
-        if (switchLabel) {
-            event.preventDefault();
-            var spid = switchLabel.getAttribute('data-pid');
-
-            if (spid) {
-                var sp = findProvider(spid);
-
-                if (sp) {
-                    var checkbox = switchLabel.querySelector('input[data-switch]');
-
-                    if (checkbox) {
-                        checkbox.checked = !sp.disabled;
-                    }
-
-                    post({
-                        type: 'toggleDisabled',
-                        providerId: sp.id
-                    });
-                }
-            }
-
-            return;
-        }
-
         var button = target.closest('[data-action]');
 
         if (!button) {
@@ -952,16 +923,6 @@
             event.stopPropagation();
             post({
                 type: 'togglePinned',
-                providerId: pid
-            });
-            return;
-        }
-
-        if (action === 'toggle-provider-free') {
-            event.preventDefault();
-            event.stopPropagation();
-            post({
-                type: 'toggleProviderFree',
                 providerId: pid
             });
             return;

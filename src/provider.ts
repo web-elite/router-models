@@ -375,14 +375,9 @@ export class RouterProvider
                 ) ||
                 event.affectsConfiguration(
                     'routerModels.excludePatterns'
-                )
-            ) {
-                this.onDidChangeEmitter.fire();
-            }
-
-            if (
+                ) ||
                 event.affectsConfiguration(
-                    'routerModels.freeModelsEnabled'
+                    'routerModels.freeOnly'
                 ) ||
                 event.affectsConfiguration(
                     'routerModels.freeModelsRefreshHours'
@@ -2120,6 +2115,20 @@ export class RouterProvider
     // ---------------------------------------------------------------
 
     /**
+     * Whether the "free only" filter is on. When set, only models
+     * that are free (user-tagged, provider free-all, id/name contains
+     * "free", or listed in the remote free-models registry) appear in
+     * the Copilot model picker; everything else is hidden.
+     */
+    private freeOnlyActive(): boolean {
+        return (
+            vscode.workspace
+                .getConfiguration('routerModels')
+                .get<boolean>('freeOnly', false)
+        );
+    }
+
+    /**
      * A model counts as free when the user tagged it, when its id /
      * display name already contains "free" (e.g. OpenRouter's `:free`
      * variants), or when the remote free-models registry lists it for
@@ -3775,14 +3784,22 @@ export class RouterProvider
         }
 
         const infos: vscode.LanguageModelChatInformation[] = [];
+        const freeOnly = this.freeOnlyActive();
 
         for (const [key, value] of this.resolved) {
             if (!this.isVisible(value.model.id)) {
                 continue;
             }
 
-            const baseName = value.model.name || value.model.id;
             const free = this.isFreeModel(value.provider, value.model);
+
+            // When the free-only filter is on, hide every model that
+            // is not free.
+            if (freeOnly && !free) {
+                continue;
+            }
+
+            const baseName = value.model.name || value.model.id;
 
             infos.push({
                 id: key,

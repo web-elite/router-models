@@ -201,6 +201,11 @@
           "minimum": 1,
           "maximum": 720,
           "description": "How often (in hours) the free-models list is re-downloaded automatically when it is enabled. 24 means once a day."
+        },
+        "routerModels.freeOnly": {
+          "type": "boolean",
+          "default": false,
+          "description": "When on, the Copilot model picker only shows models that are marked or detected as free (user-tagged, provider free-all, or matching a remote free-models entry). All other models are hidden from the picker. The sidebar is not affected."
         }
       }
     }

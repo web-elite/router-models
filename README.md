@@ -39,7 +39,8 @@ It's free and open source.
 
 VS Code Copilot Chat normally only offers Microsoft's own models.
 **Router Models** lets you add your own AI providers and use **their**
-models in the same chat — right from the regular model picker.
+models in the same chat — right from the regular model picker, and in
+**Agent Mode** too.
 
 **Why you'll love it:**
 
@@ -55,6 +56,11 @@ models in the same chat — right from the regular model picker.
 - 🔐 **Your keys stay safe** — they're stored in VS Code's secure storage,
   never in plain text files.
 - 🧠 **Works with thinking models** and tool-using agents out of the box.
+- 🤖 **Pick your models in Agent Mode** — every model you add also shows
+  up in the Agent Mode model picker, not just the regular chat/editor one.
+  Just turn on the **Agent Models** setting and they appear; you can
+  refresh any time with the **Sync Agent Mode Models** command. Anything
+  you added by hand in Agent Mode stays untouched.
 
 ---
 

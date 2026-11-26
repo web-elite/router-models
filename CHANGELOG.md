@@ -5,7 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.8] - 2026-09-19
+## [0.1.11] - 2026-11-26
+
+### Changed
+
+- **Agent Mode support is now opt-in and managed automatically.** Turn on
+  the `routerModels.agentModelsEnabled` setting (or use the
+  `Router Models: Sync Agent Mode Models` command) and Router Models
+  writes your providers/models into the `chatLanguageModels.json` file
+  Agent Mode reads. The sync runs on activation and on any provider /
+  model change, and never touches entries you added by hand.
+
+## [0.1.10] - 2026-11-25
+
+### Added
+
+- Agent Mode model selection: Router Models now manages the user-level
+  `chatLanguageModels.json` file that VS Code's Copilot Agent Mode
+  reads. With the new `routerModels.agentModelsEnabled` setting
+  (default `false`), every configured provider and model is written
+  into that registry as a `customendpoint` block — each model carrying
+  its `url`, `toolCalling`, and token caps. The managed blocks are
+  identified by a `__routerModels` marker; user-typed entries without
+  the marker are preserved verbatim, so hand-added custom endpoints
+  keep working.
+- The sync runs automatically on activation and whenever the provider
+  / model cache changes. A `Router Models: Sync Agent Mode Models`
+  command forces a manual re-sync.
+- The `prepareLanguageModelChatRequest` hook is still emitted for the
+  regular chat / editor picker, but the Agent Mode model availability
+  now comes from the JSON registry instead.
+
+## [0.1.9] - 2026-09-19
 
 ### Added
 

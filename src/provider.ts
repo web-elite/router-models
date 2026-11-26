@@ -34,6 +34,13 @@ import {
     fetchFreeModelsRegistry,
     FreeModelsIndex
 } from './free-models';
+import {
+    buildAgentRegistry,
+    mergeManagedRegistry,
+    readAgentRegistry,
+    resolveRegistryPath,
+    writeAgentRegistry
+} from './agent-models';
 
 import {
     convertMessages,
@@ -3774,6 +3781,34 @@ export class RouterProvider
     // Language model provider
     // ---------------------------------------------------------------
 
+    /**
+     * Agent Mode support: declares every router model as selectable
+     * for the Copilot agent. Without this the agent's model picker
+     * only offers the built-in Copilot models, so third-party
+     * providers never appear there.
+     *
+     * The method is optional on the provider interface and only
+     * present in recent VS Code runtime API levels, so the types
+     * here are loose (`any`) rather than referencing names that the
+     * pinned `@types/vscode` does not export yet.
+     */
+    prepareLanguageModelChatRequest(model: any): any {
+        return {
+            sendRequest: (request: any) =>
+                this.provideLanguageModelChatResponse(
+                    model,
+                    request.messages,
+                    request,
+                    request.progress,
+                    request.token
+                ),
+            onLanguageModelTokenUsage: () => {
+                // Token usage is tracked from the provider's usage
+                // headers inside the stream; nothing to forward here.
+            }
+        };
+    }
+
     async provideLanguageModelChatInformation(
         options: { silent: boolean },
         _token: vscode.CancellationToken
@@ -4258,6 +4293,117 @@ export class RouterProvider
         }
 
         return { producedOutput, producedToolCalls };
+    }
+
+    // ---------------------------------------------------------------
+    // Agent Mode registry (User/chatLanguageModels.json)
+    // ---------------------------------------------------------------
+
+    /**
+     * Whether the user opted in to managing the Agent Mode model
+     * registry. Off by default; when on, every configured provider /
+     * model is written into the user's `chatLanguageModels.json` so
+     * the Copilot Agent Mode model picker lists them.
+     */
+    agentModelsEnabled(): boolean {
+        return vscode.workspace
+            .getConfiguration('routerModels')
+            .get<boolean>('agentModelsEnabled', false);
+    }
+
+    /**
+     * The absolute path of the user-level registry file VS Code's
+     * Agent Mode reads. `userHome` is the directory that holds
+     * `settings.json` and friends (e.g. `Code\User` on Windows).
+     */
+    private registryPath(userHome: string): string {
+        return resolveRegistryPath(userHome);
+    }
+
+    /**
+     * (Re)writes the managed blocks of the Agent Mode registry from
+     * the current provider / model cache. Merges with any user-typed
+     * entries that already exist in the file, so hand-added models are
+     * kept. Returns `undefined` when the feature is off.
+     */
+    async syncAgentModels(
+        userHome: string
+    ): Promise<{ changed: boolean; path: string; count: number } | undefined> {
+        if (!this.agentModelsEnabled()) {
+            return undefined;
+        }
+
+        this.rebuildResolved();
+        const freeOnly = this.freeOnlyActive();
+
+        const managed = buildAgentRegistry(
+            this.providers
+                .filter(provider => !provider.disabled)
+                .map(provider => ({
+                    name: provider.name,
+                    baseUrl: provider.baseUrl,
+                    models: this.modelsFor(provider)
+                        .filter(model => this.isVisible(model.id))
+                        .filter(
+                            model =>
+                                !freeOnly ||
+                                this.isFreeModel(provider, model)
+                        )
+                        .map(model => ({
+                            id: model.id,
+                            ...(model.name ? { name: model.name } : {}),
+                            maxInputTokens: this.maxInputTokens(model),
+                            maxOutputTokens: this.maxOutputTokens(model)
+                        }))
+                }))
+        );
+
+        const filePath = this.registryPath(userHome);
+        const merged = mergeManagedRegistry(
+            await readAgentRegistry(filePath),
+            managed
+        );
+
+        await writeAgentRegistry(filePath, merged);
+
+        return {
+            changed: true,
+            path: filePath,
+            count: merged.length
+        };
+    }
+
+    /** Command flow around `syncAgentModels` with user feedback. */
+    async syncAgentModelsFlow(userHome: string): Promise<void> {
+        let result = await this.syncAgentModels(userHome);
+
+        if (result === undefined) {
+            const choice = await vscode.window.showWarningMessage(
+                'Router Models: Agent Mode registry sync is turned off.',
+                'Enable'
+            );
+
+            if (choice === 'Enable') {
+                await vscode.workspace
+                    .getConfiguration('routerModels')
+                    .update(
+                        'agentModelsEnabled',
+                        true,
+                        vscode.ConfigurationTarget.Global
+                    );
+                // Re-run now that the setting is on.
+                result = await this.syncAgentModels(userHome);
+            }
+
+            if (result === undefined) {
+                return;
+            }
+        }
+
+        vscode.window.showInformationMessage(
+            'Router Models: Agent Mode model registry updated — ' +
+                `${result.count} block(s) written to ${result.path}.`
+        );
     }
 
     async provideTokenCount(

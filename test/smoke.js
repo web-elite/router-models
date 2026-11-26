@@ -938,5 +938,133 @@ test('sortProvidersForSidebar: does not mutate the input', () => {
 });
 
 // ---------------------------------------------------------------
+// Agent Mode registry (chatLanguageModels.json)
+// ---------------------------------------------------------------
+
+const {
+    buildAgentRegistry,
+    mergeManagedRegistry,
+    MANAGED_MARKER
+} = require('../out/agent-models.js');
+
+test('buildAgentRegistry: emits customendpoint blocks with marker', () => {
+    const blocks = buildAgentRegistry([
+        {
+            name: 'P1',
+            baseUrl: 'https://p1.example/v1',
+            models: [
+                {
+                    id: 'm1',
+                    name: 'Model One',
+                    maxInputTokens: 8192,
+                    maxOutputTokens: 1024
+                },
+                { id: 'm2' }
+            ]
+        }
+    ]);
+
+    assert.strictEqual(blocks.length, 1);
+    const block = blocks[0];
+
+    assert.strictEqual(block.name, 'P1');
+    assert.strictEqual(block.vendor, 'customendpoint');
+    assert.strictEqual(block.apiType, 'chat-completions');
+    assert.strictEqual(block[MANAGED_MARKER], true);
+    assert.strictEqual(block.models.length, 2);
+    assert.deepStrictEqual(block.models[0], {
+        id: 'm1',
+        name: 'Model One',
+        url: 'https://p1.example/v1',
+        toolCalling: true,
+        maxInputTokens: 8192,
+        maxOutputTokens: 1024
+    });
+    // Models without an explicit name get a display name equal to id.
+    assert.deepStrictEqual(block.models[1], {
+        id: 'm2',
+        url: 'https://p1.example/v1',
+        toolCalling: true
+    });
+});
+
+test('buildAgentRegistry: skips providers with no models', () => {
+    const blocks = buildAgentRegistry([
+        { name: 'Empty', baseUrl: 'https://e.example', models: [] },
+        {
+            name: 'Full',
+            baseUrl: 'https://f.example',
+            models: [{ id: 'm' }]
+        }
+    ]);
+
+    assert.strictEqual(blocks.length, 1);
+    assert.strictEqual(blocks[0].name, 'Full');
+});
+
+test('mergeManagedRegistry: preserves user-typed entries', () => {
+    const user = [
+        {
+            name: 'MyCustom',
+            vendor: 'customendpoint',
+            apiType: 'chat-completions',
+            models: [{ id: 'mine', url: 'https://mine.example/v1' }]
+        },
+        {
+            name: 'OldManaged',
+            vendor: 'customendpoint',
+            apiType: 'chat-completions',
+            [MANAGED_MARKER]: true,
+            models: [{ id: 'stale' }]
+        }
+    ];
+
+    const managed = buildAgentRegistry([
+        {
+            name: 'P1',
+            baseUrl: 'https://p1.example',
+            models: [{ id: 'm1' }]
+        }
+    ]);
+
+    const merged = mergeManagedRegistry(user, managed);
+
+    // The user-typed entry is kept verbatim.
+    assert.strictEqual(merged.length, 2);
+    assert.strictEqual(merged[0].name, 'MyCustom');
+    assert.strictEqual(merged[1].name, 'P1');
+    // The previously-managed block is replaced by the fresh one.
+    assert.strictEqual(merged[1][MANAGED_MARKER], true);
+});
+
+test('mergeManagedRegistry: does not mutate the user list', () => {
+    const user = [
+        {
+            name: 'User',
+            vendor: 'customendpoint',
+            apiType: 'chat-completions',
+            models: [{ id: 'u' }]
+        }
+    ];
+
+    const managed = buildAgentRegistry([
+        {
+            name: 'P1',
+            baseUrl: 'https://p1.example',
+            models: [{ id: 'm1' }]
+        }
+    ]);
+
+    mergeManagedRegistry(user, managed);
+
+    assert.strictEqual(user.length, 1);
+    assert.strictEqual(user[0].name, 'User');
+});
+
+test('buildAgentRegistry: empty input produces empty output', () => {
+    assert.deepStrictEqual(buildAgentRegistry([]), []);
+});
+
+// ---------------------------------------------------------------
 
 console.log('\nAll ' + passed + ' smoke tests passed.');

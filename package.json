@@ -1,8 +1,8 @@
 {
   "name": "router-models",
   "displayName": "Router Models",
-  "description": "Use custom AI models in GitHub Copilot Chat — OpenRouter, Ollama, LM Studio, Groq, OpenAI or any OpenAI-compatible API. BYOK with multiple keys and auto rotation, free models, cost-aware routing.",
-  "version": "0.1.9",
+  "description": "Use custom AI models in GitHub Copilot Chat and Agent Mode — OpenRouter, Ollama, LM Studio, Groq, OpenAI or any OpenAI-compatible API. BYOK with multiple keys and auto rotation, free models, cost-aware routing.",
+  "version": "0.1.11",
   "icon": "media/icon.png",
   "publisher": "alireza-yaghouti",
   "license": "MIT",
@@ -118,6 +118,10 @@
       {
         "command": "router-models.resetCooldowns",
         "title": "Router Models: Reset Key Cooldowns"
+      },
+      {
+        "command": "router-models.syncAgentModels",
+        "title": "Router Models: Sync Agent Mode Models"
       }
     ],
     "configuration": {
@@ -206,6 +210,11 @@
           "type": "boolean",
           "default": false,
           "description": "When on, the Copilot model picker only shows models that are marked or detected as free (user-tagged, provider free-all, or matching a remote free-models entry). All other models are hidden from the picker. The sidebar is not affected."
+        },
+        "routerModels.agentModelsEnabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "When on, Router Models writes your providers and models into the user's chatLanguageModels.json so they appear in the Copilot Agent Mode model picker, not just the regular chat/editor picker. Off by default; turning it on also runs a sync immediately. Use the 'Router Models: Sync Agent Mode Models' command to force a re-sync at any time."
         }
       }
     }
@@ -213,7 +222,8 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
   },
   "devDependencies": {
     "@types/node": "^22.20.2",

@@ -9,11 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Provider icons now show in the Copilot model picker.** Each model
-  entry carries the downloaded provider icon as a data URI, so the
-  picker makes it obvious which service a model belongs to. The same
-  icon is written into the Agent Mode registry
-  (`chatLanguageModels.json`) for providers that have one.
+- **Provider names now show next to each model in the Copilot model
+  picker.** The picker's `detail` line now carries the provider's
+  display name (instead of a raw base URL), so you can tell at a glance
+  which service a model comes from. Models are also grouped under their
+  provider name in the picker.
+
+### Changed
+
+- Agent Mode model sync is opt-in via `routerModels.agentModelsEnabled`
+  (or the `Sync Agent Mode Models` command).
 
 ## [0.1.11] - 2026-11-26
 

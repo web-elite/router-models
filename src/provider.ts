@@ -3883,6 +3883,12 @@ export class RouterProvider
                     value.provider
                 )) ?? undefined;
 
+            // `detail` is the line rendered next to the model name in
+            // the picker — use the provider's display name so it is
+            // obvious which service the model comes from (a raw base
+            // URL is not useful here).
+            const providerLabel = value.provider.name;
+
             // `icon` is not yet on the pinned @types/vscode for
             // `LanguageModelChatInformation`; cast the object through
             // `as` so the spread compiles on both old and new typings.
@@ -3898,7 +3904,7 @@ export class RouterProvider
                 tooltip: free
                     ? `${value.provider.name} • ${value.model.id} • free`
                     : `${value.provider.name} • ${value.model.id}`,
-                detail: value.provider.baseUrl,
+                detail: providerLabel,
                 capabilities: {
                     imageInput: false,
                     toolCalling: true

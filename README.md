@@ -56,6 +56,10 @@ models in the same chat — right from the regular model picker, and in
 - 🔐 **Your keys stay safe** — they're stored in VS Code's secure storage,
   never in plain text files.
 - 🧠 **Works with thinking models** and tool-using agents out of the box.
+- 🖼️ **Provider icons in the model picker** — when a provider has an
+  icon, it shows next to each of its models in the Copilot model picker,
+  so you can tell at a glance which service a model comes from. The same
+  icon is written to the Agent Mode registry when it exists.
 - 🤖 **Pick your models in Agent Mode** — every model you add also shows
   up in the Agent Mode model picker, not just the regular chat/editor one.
   Just turn on the **Agent Models** setting and they appear; you can

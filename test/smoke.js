@@ -1065,6 +1065,29 @@ test('buildAgentRegistry: empty input produces empty output', () => {
     assert.deepStrictEqual(buildAgentRegistry([]), []);
 });
 
+test('buildAgentRegistry: includes icon when provided', () => {
+    const dataUri =
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAA==';
+    const blocks = buildAgentRegistry([
+        {
+            name: 'P1',
+            baseUrl: 'https://p1.example/v1',
+            icon: dataUri,
+            models: [{ id: 'm1' }]
+        },
+        {
+            name: 'P2',
+            baseUrl: 'https://p2.example/v1',
+            models: [{ id: 'm1' }]
+        }
+    ]);
+
+    assert.strictEqual(blocks.length, 2);
+    assert.strictEqual(blocks[0].icon, dataUri);
+    // A provider without an icon has no `icon` key at all.
+    assert.ok(!('icon' in blocks[1]));
+});
+
 // ---------------------------------------------------------------
 
 console.log('\nAll ' + passed + ' smoke tests passed.');

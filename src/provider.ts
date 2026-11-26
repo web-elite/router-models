@@ -212,6 +212,33 @@ function extMime(ext: string): string {
     return map[ext] ?? 'image/png';
 }
 
+/**
+ * Reads the cached icon file of a provider and returns it as a data
+ * URI (suitable for the model picker and the Agent Mode registry), or
+ * `undefined` when no icon file is present or readable.
+ */
+async function readProviderIcon(
+    iconsDir: string,
+    provider: ProviderConfig
+): Promise<string | undefined> {
+    if (!provider.iconFile) {
+        return undefined;
+    }
+
+    try {
+        const buffer = await fs.readFile(
+            path.join(iconsDir, provider.iconFile)
+        );
+
+        return (
+            `data:${extMime(path.extname(provider.iconFile).slice(1))};base64,` +
+            buffer.toString('base64')
+        );
+    } catch {
+        return undefined;
+    }
+}
+
 function toErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
 }
@@ -3848,7 +3875,18 @@ export class RouterProvider
 
             const baseName = value.model.name || value.model.id;
 
-            infos.push({
+            // The provider's icon (when downloaded) lets the model
+            // picker show which service a model belongs to.
+            const icon =
+                (await readProviderIcon(
+                    this.iconsDir.fsPath,
+                    value.provider
+                )) ?? undefined;
+
+            // `icon` is not yet on the pinned @types/vscode for
+            // `LanguageModelChatInformation`; cast the object through
+            // `as` so the spread compiles on both old and new typings.
+            const info = {
                 id: key,
                 name: free && !/\bfree\b/i.test(baseName)
                     ? `${baseName} (free) - ${value.provider.name}`
@@ -3864,8 +3902,11 @@ export class RouterProvider
                 capabilities: {
                     imageInput: false,
                     toolCalling: true
-                }
-            });
+                },
+                ...(icon ? { icon } : {})
+            };
+
+            infos.push(info as vscode.LanguageModelChatInformation);
         }
 
         return infos;
@@ -4336,12 +4377,19 @@ export class RouterProvider
         this.rebuildResolved();
         const freeOnly = this.freeOnlyActive();
 
-        const managed = buildAgentRegistry(
+        // Resolve each provider's cached icon (data URI) so the Agent
+        // Mode model picker can show it next to the provider name.
+        const registryProviders = await Promise.all(
             this.providers
                 .filter(provider => !provider.disabled)
-                .map(provider => ({
+                .map(async provider => ({
                     name: provider.name,
                     baseUrl: provider.baseUrl,
+                    icon:
+                        (await readProviderIcon(
+                            this.iconsDir.fsPath,
+                            provider
+                        )) ?? undefined,
                     models: this.modelsFor(provider)
                         .filter(model => this.isVisible(model.id))
                         .filter(
@@ -4357,6 +4405,8 @@ export class RouterProvider
                         }))
                 }))
         );
+
+        const managed = buildAgentRegistry(registryProviders);
 
         const filePath = this.registryPath(userHome);
         const merged = mergeManagedRegistry(

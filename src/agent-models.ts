@@ -29,6 +29,12 @@ export type AgentProviderBlock = {
     name: string;
     vendor: string;
     apiType?: string;
+    /**
+     * Optional data URI (or URL) of the provider's icon, rendered by
+     * the model picker when available. Unknown to older VS Code
+     * versions, which simply ignore it.
+     */
+    icon?: string;
     models: AgentModelEntry[];
     /** Marker for blocks managed by Router Models (never user-typed). */
     __routerModels?: boolean;
@@ -55,6 +61,8 @@ export function buildAgentRegistry(
     providers: {
         name: string;
         baseUrl: string;
+        /** Provider icon as a data URI, when one is available. */
+        icon?: string;
         /** Models to include; `visible` is pre-filtered by the caller. */
         models: {
             id: string;
@@ -91,6 +99,7 @@ export function buildAgentRegistry(
             name: provider.name,
             vendor: 'customendpoint',
             apiType: 'chat-completions',
+            ...(provider.icon ? { icon: provider.icon } : {}),
             models,
             [MANAGED_MARKER]: true
         });

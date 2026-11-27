@@ -59,7 +59,8 @@ models in the same chat — right from the regular model picker, and in
 - 🖼️ **Know which service a model comes from** — each model in the Copilot
   model picker shows its provider's name in the line next to it, and all
   of a provider's models are grouped under that provider's name, so it is
-  obvious which service you are picking.
+  obvious which service you are picking. Router Models itself has its own
+  icon on the picker's tab title.
 - 🤖 **Pick your models in Agent Mode** — every model you add also shows
   up in the Agent Mode model picker, not just the regular chat/editor one.
   Just turn on the **Agent Models** setting and they appear; you can

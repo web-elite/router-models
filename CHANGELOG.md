@@ -5,9 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.12] - 2026-11-26
+## [0.1.14] - 2026-11-27
 
 ### Added
+
+- **Router Models now has an icon in the Copilot model picker.** The
+  provider's tab title in the picker shows the Router Models icon
+  instead of a generic one — the white sidebar icon on dark themes and
+  the gradient logo on light themes.
+
+## [0.1.13] - 2026-11-26
+
+### Fixed
 
 - **Provider names now show next to each model in the Copilot model
   picker.** The picker's `detail` line now carries the provider's
@@ -19,6 +28,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Agent Mode model sync is opt-in via `routerModels.agentModelsEnabled`
   (or the `Sync Agent Mode Models` command).
+
+## [0.1.12] - 2026-11-26
+
+### Added
+
+- **Provider icons now show in the Copilot model picker.** Each model
+  entry carries the downloaded provider icon as a data URI, so the
+  picker makes it obvious which service a model belongs to. The same
+  icon is written into the Agent Mode registry
+  (`chatLanguageModels.json`) for providers that have one.
 
 ## [0.1.11] - 2026-11-26
 

@@ -22,7 +22,7 @@ It's free and open source.
 </div>
 
 <p align="center">
-  <img src="screenshot/main.png" alt="Router Models — VS Code Copilot Chat with custom AI models" width="800">
+  <img src="screenshot/feature-guide.png" alt="Router Models — VS Code Copilot Chat with custom AI models" width="800">
 </p>
 
 >  
@@ -37,10 +37,11 @@ It's free and open source.
 
 ## 🤔 What does it do?
 
-VS Code Copilot Chat normally only offers Microsoft's own models.
-**Router Models** lets you add your own AI providers and use **their**
-models in the same chat — right from the regular model picker, and in
-**Agent Mode** too.
+VS Code already lets you bring your own models, but it leaves the
+rest to you: one key per provider, no failover, nothing to manage free
+models with. **Router Models** fills that gap. Your models show up in
+the same chat — right from the regular model picker, and in **Agent
+Mode** too — and on top of that you get the features below:
 
 **Why you'll love it:**
 
